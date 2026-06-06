@@ -38,6 +38,7 @@ function [] = README()
 %     Elevon.ChordFractions = linspace(0.10, 0.35, 26)';
 %     Elevon.SpanFractions = linspace(0.05, 1.00, 192)';
 %     Sizing = DynamicsPkg.SizeElevons(Aircraft, Cases, Elevon);
+%     SizingOpt = DynamicsPkg.OptimizeElevonsCasadi(Aircraft, Cases, Elevon);
 %
 % A standalone demo is available with:
 %
@@ -53,8 +54,15 @@ function [] = README()
 % Elevon area is approximated as span fraction times chord fraction. The
 % trim derivatives use EtaControl * AreaFraction directly.
 %
+% Trim drag is modeled as:
+%
+%     DeltaCDtrim = CDdelta * AreaFraction * delta_e^2
+%
 % The current implementation is intentionally low order. It is meant to
 % expose control-authority feasibility during conceptual sizing, not replace
 % a nonlinear 6DOF simulation or high-fidelity aero database.
+%
+% OptimizeElevonsCasadi uses CasADi/IPOPT for a continuous version of the
+% same elevon sizing problem. It requires the CasADi MATLAB folder on path.
 %
 end

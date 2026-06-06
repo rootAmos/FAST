@@ -25,12 +25,6 @@ else
     WeightPenaltyFactor = 0.08;
 end
 
-if isfield(Sizing, "TrimDragPenaltyFactor")
-    TrimDragPenaltyFactor = Sizing.TrimDragPenaltyFactor;
-else
-    TrimDragPenaltyFactor = 0.06;
-end
-
 if isfield(Aircraft.Specs.Weight, "WairfCF") && ~isnan(Aircraft.Specs.Weight.WairfCF)
     WairfCF = Aircraft.Specs.Weight.WairfCF;
 else
@@ -38,7 +32,15 @@ else
 end
 
 WeightPenalty = 1 + WeightPenaltyFactor * AreaFraction;
-DragPenalty = 1 + TrimDragPenaltyFactor * AreaFraction;
+
+TrimDragPenalty = 0;
+if isfield(Sizing, "Checks")
+    CDcontrol = [Sizing.Checks.Trim.Trim.CDcontrol; Sizing.Checks.Cruise.Trim.CDcontrol];
+    CDclean = [Sizing.Checks.Trim.Trim.CDclean; Sizing.Checks.Cruise.Trim.CDclean];
+    TrimDragPenalty = max(CDcontrol ./ CDclean);
+end
+
+DragPenalty = 1 + TrimDragPenalty;
 
 Aircraft.Specs.Weight.WairfCF = WairfCF * WeightPenalty;
 
@@ -54,5 +56,6 @@ Aircraft.Dynamics.ControlSurface.ChordFraction = Sizing.ChordFraction;
 Aircraft.Dynamics.ControlSurface.EtaControl = Sizing.EtaControl;
 Aircraft.Dynamics.ControlSurface.WeightPenalty = WeightPenalty;
 Aircraft.Dynamics.ControlSurface.DragPenalty = DragPenalty;
+Aircraft.Dynamics.ControlSurface.TrimDragPenalty = TrimDragPenalty;
 
 end

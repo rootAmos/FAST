@@ -64,7 +64,10 @@ AlphaTrim = (CLtrim - CLdelta .* DeltaTrim) ./ Aero.CLalpha;
 % Nelson, Eq. 2.47: trim requires the pitching-moment coefficient to be zero.
 CmResidual = Aero.Cm0 + Aero.Cmalpha .* AlphaTrim + Cmdelta .* DeltaTrim;
 
-CDtrim = Aero.CD0 + Aero.K .* CLtrim .^ 2;
+% Trim drag is charged as a quadratic drag increment from elevon deflection.
+CDclean = Aero.CD0 + Aero.K .* CLtrim .^ 2;
+CDcontrol = Aero.CDdelta .* Elevon.AreaFraction .* DeltaTrim .^ 2;
+CDtrim = CDclean + CDcontrol;
 
 Trim.Alt = Alt;
 Trim.TAS = TAS;
@@ -77,7 +80,10 @@ Trim.CLtrim = CLtrim;
 Trim.AlphaTrim = AlphaTrim;
 Trim.DeltaTrim = DeltaTrim;
 Trim.CmResidual = CmResidual;
+Trim.CDclean = CDclean;
+Trim.CDcontrol = CDcontrol;
 Trim.CDtrim = CDtrim;
+Trim.L_D_clean = CLtrim ./ CDclean;
 Trim.L_D = CLtrim ./ CDtrim;
 Trim.Feasible = abs(DeltaTrim) <= MaxDeflection;
 Trim.MaxDeflection = MaxDeflection;

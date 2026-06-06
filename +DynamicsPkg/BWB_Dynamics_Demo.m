@@ -1,6 +1,6 @@
-function [Sizing, Cases, CgSweep] = BWB_Dynamics_Demo()
+function [Sizing, Cases, CgSweep, SizingOpt] = BWB_Dynamics_Demo()
 %
-% [Sizing, Cases, CgSweep] = BWB_Dynamics_Demo()
+% [Sizing, Cases, CgSweep, SizingOpt] = BWB_Dynamics_Demo()
 %
 % Demonstrate the new DynamicsPkg trim and elevon-sizing workflow using a
 % FAST aircraft structure. Replace the aircraft spec with a BWB-specific
@@ -39,9 +39,10 @@ Aircraft.Specs.Dynamics.Longitudinal.Cmdelta = -0.85;
 Aircraft.Specs.Dynamics.Longitudinal.CLq = 3.0;
 Aircraft.Specs.Dynamics.Longitudinal.Cmq = -8.0;
 
-% Simple trim drag model: CD = CD0 + K * CL^2.
+% Simple drag model: CD = CD0 + K * CL^2 + CDdelta * Se/S * delta_e^2.
 Aircraft.Specs.Dynamics.Longitudinal.CD0 = 0.019;
 Aircraft.Specs.Dynamics.Longitudinal.K = 0.050;
+Aircraft.Specs.Dynamics.Longitudinal.CDdelta = 0.08;
 
 % CLmax assumptions used to place low-speed trim cases.
 Aircraft.Specs.Dynamics.Longitudinal.CLmaxTko = 1.8;
@@ -97,6 +98,9 @@ Elevon.SpanFractions = linspace(0.05, 1.00, 96)';
 % Sweep elevon chord and span until all paper-style checks pass.
 Sizing = DynamicsPkg.SizeElevons(Aircraft, Cases, Elevon);
 
+% Continuous version of the same problem using CasADi/IPOPT.
+SizingOpt = DynamicsPkg.OptimizeElevonsCasadi(Aircraft, Cases, Elevon);
+
 % Sweep CG to show the wing/control-surface sizing coupling.
 XcgMAC = linspace(0.22, 0.42, 15)';
 AreaFraction = zeros(size(XcgMAC));
@@ -119,6 +123,7 @@ CgSweep.Converged = Converged;
 fprintf(1, "Required elevon span fraction: %.3f\n", Sizing.SpanFraction);
 fprintf(1, "Required elevon chord fraction: %.3f\n", Sizing.ChordFraction);
 fprintf(1, "Required elevon area fraction: %.3f\n", Sizing.AreaFraction);
+fprintf(1, "CasADi elevon area fraction: %.3f\n", SizingOpt.AreaFraction);
 fprintf(1, "Elevon eta-control: %.3f\n", Sizing.EtaControl);
 fprintf(1, "Maximum selected trim deflection: %.2f deg\n", max(abs([Sizing.Checks.Trim.Delta; Sizing.Checks.Pullup.DeltaFinal; Sizing.Checks.Cruise.Delta])) * 180 / pi);
 fprintf(1, "All trim cases feasible: %d\n", Sizing.Converged);
@@ -137,6 +142,7 @@ hold on
 contour(Sizing.ChordFractions, Sizing.SpanFractions, MaxDeflectionDeg, ...
     [DeflectionLimitDeg, DeflectionLimitDeg], "k", "LineWidth", 1.5);
 plot(Sizing.ChordFraction, Sizing.SpanFraction, "rx", "MarkerSize", 10, "LineWidth", 2);
+plot(SizingOpt.ChordFraction, SizingOpt.SpanFraction, "wo", "MarkerSize", 7, "LineWidth", 1.5);
 grid on
 xlabel("Elevon chord fraction");
 ylabel("Elevon span fraction");

@@ -11,6 +11,7 @@
 % CheckTakeoffRotation - DynamicsPkg.CheckTakeoffRotation is a function.
 % CheckTimeToBank      - DynamicsPkg.CheckTimeToBank is a function.
 % TrimLongitudinal     - DynamicsPkg.TrimLongitudinal is a function.
+% OptimizeElevonsCasadi - DynamicsPkg.OptimizeElevonsCasadi is a function.
 % SizeElevon           - DynamicsPkg.SizeElevon is a function.
 % SizeElevons          - DynamicsPkg.SizeElevons is a function.
 % ControlSurfacePenalty - DynamicsPkg.ControlSurfacePenalty is a function.
