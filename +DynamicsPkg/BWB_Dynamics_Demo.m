@@ -1,6 +1,6 @@
-function [Sizing, TrimCase, CgSweep] = BWB_Dynamics_Demo()
+function [Sizing, Cases, CgSweep] = BWB_Dynamics_Demo()
 %
-% [Sizing, TrimCase, CgSweep] = BWB_Dynamics_Demo()
+% [Sizing, Cases, CgSweep] = BWB_Dynamics_Demo()
 %
 % Demonstrate the new DynamicsPkg trim and elevon-sizing workflow using a
 % FAST aircraft structure. Replace the aircraft spec with a BWB-specific
@@ -35,6 +35,10 @@ Aircraft.Specs.Dynamics.Longitudinal.Cmalpha = -0.35;
 % Elevon moment effectiveness, dCm/ddelta_e [1/rad].
 Aircraft.Specs.Dynamics.Longitudinal.Cmdelta = -0.85;
 
+% Pitch-rate derivatives for the pull-up check.
+Aircraft.Specs.Dynamics.Longitudinal.CLq = 3.0;
+Aircraft.Specs.Dynamics.Longitudinal.Cmq = -8.0;
+
 % Simple trim drag model: CD = CD0 + K * CL^2.
 Aircraft.Specs.Dynamics.Longitudinal.CD0 = 0.019;
 Aircraft.Specs.Dynamics.Longitudinal.K = 0.050;
@@ -43,8 +47,29 @@ Aircraft.Specs.Dynamics.Longitudinal.K = 0.050;
 Aircraft.Specs.Dynamics.Longitudinal.CLmaxTko = 1.8;
 Aircraft.Specs.Dynamics.Longitudinal.CLmaxLnd = 1.9;
 
+% Control/alpha limits used by the paper-style checks.
+Aircraft.Specs.Dynamics.Longitudinal.DeltaMax = deg2rad(25);
+Aircraft.Specs.Dynamics.Longitudinal.AlphaMax = deg2rad(28);
+
 % Aero moment reference location, x_ref / MAC [-].
 Aircraft.Specs.Dynamics.Longitudinal.XrefMAC = 0.25;
+
+%% LATERAL AND GEOMETRY INPUTS %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Placeholder roll derivatives for the time-to-bank check.
+Aircraft.Specs.Dynamics.Lateral.Clda = 0.08;
+Aircraft.Specs.Dynamics.Lateral.Clp = -0.45;
+
+% Placeholder geometry/inertia values used by pull-up, bank, and rotation.
+Aircraft.Specs.Dynamics.Geometry.b = 35;
+Aircraft.Specs.Dynamics.Geometry.cbar = 4.0;
+Aircraft.Specs.Dynamics.Inertia.Ixx = 1.2e6;
+
+% CG and main-gear locations are nondimensionalized by MAC.
+Aircraft.Specs.Dynamics.CG.ForwardMAC = 0.28;
+Aircraft.Specs.Dynamics.CG.AftMAC = 0.38;
+Aircraft.Specs.Dynamics.Gear.XmlgMAC = 0.36;
 
 %% FAST PRE-PROCESSING %%
 %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -53,32 +78,36 @@ Aircraft.Specs.Dynamics.Longitudinal.XrefMAC = 0.25;
 Aircraft = DataStructPkg.PreSpecProcessing(Aircraft);
 Aircraft = DataStructPkg.SpecProcessing(Aircraft);
 
-%% TRIM ENVELOPE AND CONTROL SURFACE SIZING %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+OutputDir = fullfile("+DynamicsPkg", "outputs");
+if ~exist(OutputDir, "dir")
+    mkdir(OutputDir);
+end
 
-% Build low-speed and cruise trim cases from FAST outputs.
-TrimCase = DynamicsPkg.SweepTrimEnvelope(Aircraft);
+%% PAPER-STYLE CONTROL SURFACE SIZING %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% CG location, x_cg / MAC [-]. Moments are shifted here before trim.
-TrimCase.XcgMAC = 0.32;
+% Build named control cases from the Flying-V control sizing method.
+Cases = DynamicsPkg.BuildControlSizingCases(Aircraft);
 
 % Elevon geometry model: Selevon/Sref ~= span_fraction * chord_fraction.
-TrimCase.Elevon.EtaControl = 0.85;
-TrimCase.Elevon.ChordFraction = 0.25;
-TrimCase.Elevon.SpanFractions = linspace(0.05, 1.00, 192)';
+Elevon.EtaControl = 0.85;
+Elevon.ChordFractions = linspace(0.10, 0.35, 16)';
+Elevon.SpanFractions = linspace(0.05, 1.00, 96)';
 
-% Sweep elevon span until all cases trim within limits.
-Sizing = DynamicsPkg.SizeElevon(Aircraft, TrimCase);
+% Sweep elevon chord and span until all paper-style checks pass.
+Sizing = DynamicsPkg.SizeElevons(Aircraft, Cases, Elevon);
 
 % Sweep CG to show the wing/control-surface sizing coupling.
-XcgMAC = linspace(0.22, 0.42, 25)';
+XcgMAC = linspace(0.22, 0.42, 15)';
 AreaFraction = zeros(size(XcgMAC));
 Converged = zeros(size(XcgMAC));
 
 for icg = 1:length(XcgMAC)
-    SweepCase = TrimCase;
-    SweepCase.XcgMAC = XcgMAC(icg);
-    SweepSizing = DynamicsPkg.SizeElevon(Aircraft, SweepCase);
+    SweepCases = Cases;
+    SweepCases.LongitudinalTrim.XcgMAC = XcgMAC(icg);
+    SweepCases.Pullup.XcgMAC = XcgMAC(icg);
+    SweepCases.TakeoffRotation.XcgMAC = XcgMAC(icg);
+    SweepSizing = DynamicsPkg.SizeElevons(Aircraft, SweepCases, Elevon);
     AreaFraction(icg) = SweepSizing.AreaFraction;
     Converged(icg) = SweepSizing.Converged;
 end
@@ -88,31 +117,87 @@ CgSweep.AreaFraction = AreaFraction;
 CgSweep.Converged = Converged;
 
 fprintf(1, "Required elevon span fraction: %.3f\n", Sizing.SpanFraction);
+fprintf(1, "Required elevon chord fraction: %.3f\n", Sizing.ChordFraction);
 fprintf(1, "Required elevon area fraction: %.3f\n", Sizing.AreaFraction);
 fprintf(1, "Elevon eta-control: %.3f\n", Sizing.EtaControl);
-fprintf(1, "Maximum trim deflection: %.2f deg\n", max(abs(Sizing.Trim.DeltaTrim)) * 180 / pi);
+fprintf(1, "Maximum selected trim deflection: %.2f deg\n", max(abs([Sizing.Checks.Trim.Delta; Sizing.Checks.Pullup.DeltaFinal; Sizing.Checks.Cruise.Delta])) * 180 / pi);
 fprintf(1, "All trim cases feasible: %d\n", Sizing.Converged);
-disp(table(TrimCase.CaseName, TrimCase.CLtarget, TrimCase.Nz, TrimCase.Vel, ...
-    'VariableNames', ["Case", "CL", "Nz", "TAS_mps"]));
 
 %% PLOT THE SIZING TRADE %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% Deflection demand versus elevon area fraction.
+% Required deflection over the chord/span grid.
 figure;
-plot(Sizing.AreaFractions, Sizing.MaxAbsDeflection * 180 / pi, "LineWidth", 1.5);
+MaxDeflectionDeg = Sizing.MaxDeflection * 180 / pi;
+DeflectionLimitDeg = Aircraft.Specs.Dynamics.Longitudinal.DeltaMax * 180 / pi;
+MaxDeflectionPlot = min(MaxDeflectionDeg, 1.5 * DeflectionLimitDeg);
+contourf(Sizing.ChordFractions, Sizing.SpanFractions, MaxDeflectionPlot, 20, "LineColor", "none");
+colorbar
 hold on
-yline(TrimCase.MaxDeflection * 180 / pi, "--");
+contour(Sizing.ChordFractions, Sizing.SpanFractions, MaxDeflectionDeg, ...
+    [DeflectionLimitDeg, DeflectionLimitDeg], "k", "LineWidth", 1.5);
+plot(Sizing.ChordFraction, Sizing.SpanFraction, "rx", "MarkerSize", 10, "LineWidth", 2);
 grid on
-xlabel("Elevon area fraction, S_e / S");
-ylabel("Maximum trim deflection [deg]");
-title("Conceptual BWB Trim Authority Sweep");
+xlabel("Elevon chord fraction");
+ylabel("Elevon span fraction");
+title("Required Elevon Deflection [deg]");
+saveas(gcf, fullfile(OutputDir, "elevon_feasibility.png"));
 
 figure;
 plot(CgSweep.XcgMAC, CgSweep.AreaFraction, "LineWidth", 1.5);
+hold on
+xline(Cases.LongitudinalTrim.XcgMAC, "--", "Forward CG");
+xline(Cases.TimeToBank.XcgMAC, "--", "Aft CG");
 grid on
 xlabel("CG location, x_{cg} / MAC");
 ylabel("Required elevon area fraction, S_e / S");
 title("Control Surface Sizing vs CG");
+saveas(gcf, fullfile(OutputDir, "elevon_area_vs_cg.png"));
+
+% Final selected design margins.
+CaseLabels = categorical(["Trim"; "Pull-up"; "Cruise"]);
+CaseLabels = reordercats(CaseLabels, ["Trim"; "Pull-up"; "Cruise"]);
+
+DeltaDeg = abs([Sizing.Checks.Trim.Delta; ...
+                Sizing.Checks.Pullup.DeltaFinal; ...
+                Sizing.Checks.Cruise.Delta]) * 180 / pi;
+
+AlphaDeg = abs([Sizing.Checks.Trim.Alpha; ...
+                Sizing.Checks.Pullup.AlphaFinal; ...
+                Sizing.Checks.Cruise.Alpha]) * 180 / pi;
+
+figure;
+subplot(2, 2, 1)
+bar(CaseLabels, DeltaDeg)
+hold on
+yline(Aircraft.Specs.Dynamics.Longitudinal.DeltaMax * 180 / pi, "--");
+grid on
+ylabel("|delta_e| [deg]");
+title("Elevon Deflection")
+
+subplot(2, 2, 2)
+bar(CaseLabels, AlphaDeg)
+hold on
+yline(Aircraft.Specs.Dynamics.Longitudinal.AlphaMax * 180 / pi, "--");
+grid on
+ylabel("|alpha| [deg]");
+title("Angle of Attack")
+
+subplot(2, 2, 3)
+bar(categorical("Time to bank"), abs(Sizing.Checks.Bank.Phi) * 180 / pi)
+hold on
+yline(Cases.TimeToBank.BankTarget * 180 / pi, "--");
+grid on
+ylabel("Bank angle in 7 s [deg]");
+title("Roll Authority")
+
+subplot(2, 2, 4)
+bar(categorical("Rotation"), Sizing.Checks.Rotation.VR)
+hold on
+yline(Cases.TakeoffRotation.V2min - Cases.TakeoffRotation.Margin, "--");
+grid on
+ylabel("Speed [m/s]");
+title("Takeoff Rotation")
+saveas(gcf, fullfile(OutputDir, "selected_design_margins.png"));
 
 end

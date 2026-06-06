@@ -12,7 +12,7 @@ function [] = README()
 %     Nelson, R. C. Flight Stability and Automatic Control.
 %     Section 2.4.2, Elevator Angle to Trim, Equations 2.47-2.51.
 %
-% Typical workflow:
+% Simple trim workflow:
 %
 %     Aircraft = Main(AircraftSpecsPkg.Example, @MissionProfilesPkg.ParametricRegional);
 %     Aircraft.Specs.Dynamics.Longitudinal.CLalpha = 4.8;
@@ -30,6 +30,14 @@ function [] = README()
 %     TrimCase.Elevon.ChordFraction = 0.25;
 %     Sizing = DynamicsPkg.SizeElevon(Aircraft, TrimCase);
 %     Aircraft = DynamicsPkg.ControlSurfacePenalty(Aircraft, Sizing);
+%
+% Paper-style grouped elevon sizing workflow:
+%
+%     Cases = DynamicsPkg.BuildControlSizingCases(Aircraft);
+%     Elevon.EtaControl = 0.85;
+%     Elevon.ChordFractions = linspace(0.10, 0.35, 26)';
+%     Elevon.SpanFractions = linspace(0.05, 1.00, 192)';
+%     Sizing = DynamicsPkg.SizeElevons(Aircraft, Cases, Elevon);
 %
 % A standalone demo is available with:
 %
