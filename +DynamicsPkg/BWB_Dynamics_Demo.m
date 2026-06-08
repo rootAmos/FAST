@@ -110,6 +110,8 @@ ChordScale = (Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS) / ChordA
 RightChord = ChordTable(ChordTable.normalized_span_eta >= 0, :);
 ChordEta = RightChord.normalized_span_eta;
 ChordLength = RightChord.chord_length * ChordScale;
+ChordLeadingEdgeX = -RightChord.leading_edge_y * ChordScale;
+ChordTrailingEdgeX = -RightChord.trailing_edge_y * ChordScale;
 MaxModelHalfSpanStation = max(abs(ChordTable.span_station_x));
 
 %% PAPER-STYLE CONTROL SURFACE SIZING %%
@@ -129,28 +131,35 @@ Surfaces.PitchOutEtaStations = StationToEta([1, 2, 3, 4, 5])';
 Surfaces.SharedTrailingEdge = 1;
 Surfaces.Elevator.Name = "Pitch Elevon";
 Surfaces.Elevator.EtaControl = 0.85;
-Surfaces.Elevator.ChordFractions = [0.40; 0.50; 0.55];
+Surfaces.Elevator.ChordFractions = [0.60; 0.75; 0.90];
 Surfaces.Elevator.EtaStations = Surfaces.PitchOutEtaStations;
 Surfaces.Elevator.ChordEta = ChordEta;
 Surfaces.Elevator.ChordLength = ChordLength;
+Surfaces.Elevator.ChordLeadingEdgeX = ChordLeadingEdgeX;
+Surfaces.Elevator.ChordTrailingEdgeX = ChordTrailingEdgeX;
+Surfaces.Elevator.SectionClDelta = 3.0;
 Surfaces.Elevator.UsePhysicalArea = 1;
 
 Surfaces.DualElevon.Name = "Dual-Use Elevon";
 Surfaces.DualElevon.EtaControl = 0.85;
-Surfaces.DualElevon.ChordFractions = [0.40; 0.50; 0.55];
+Surfaces.DualElevon.ChordFractions = [0.60; 0.75; 0.90];
 Surfaces.DualElevon.EtaStations = Surfaces.OutboardEtaStations;
 Surfaces.DualElevon.ChordEta = ChordEta;
 Surfaces.DualElevon.ChordLength = ChordLength;
-Surfaces.DualElevon.SectionClDelta = 2.5;
+Surfaces.DualElevon.ChordLeadingEdgeX = ChordLeadingEdgeX;
+Surfaces.DualElevon.ChordTrailingEdgeX = ChordTrailingEdgeX;
+Surfaces.DualElevon.SectionClDelta = 3.0;
 Surfaces.DualElevon.UsePhysicalArea = 1;
 
 Surfaces.Aileron.Name = "Roll Elevon";
 Surfaces.Aileron.EtaControl = 0.85;
-Surfaces.Aileron.ChordFractions = [0.20; 0.25; 0.30];
+Surfaces.Aileron.ChordFractions = [0.25; 0.35; 0.50];
 Surfaces.Aileron.EtaStations = Surfaces.OutboardEtaStations;
 Surfaces.Aileron.ReferenceChord = (Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS) / Aircraft.Specs.Dynamics.Geometry.b;
 Surfaces.Aileron.ChordEta = ChordEta;
 Surfaces.Aileron.ChordLength = ChordLength;
+Surfaces.Aileron.ChordLeadingEdgeX = ChordLeadingEdgeX;
+Surfaces.Aileron.ChordTrailingEdgeX = ChordTrailingEdgeX;
 Surfaces.Aileron.SectionClDelta = 2.5;
 Surfaces.Aileron.UsePhysicalArea = 1;
 

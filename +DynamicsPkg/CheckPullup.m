@@ -13,8 +13,13 @@ TrimCheck = DynamicsPkg.CheckLongitudinalTrim(Aircraft, Case, Elevator);
 Trim = TrimCheck.Trim;
 
 V = Trim.TAS;
-CLdelta = Aero.CLdelta * Elevator.EtaControl * Elevator.AreaFraction;
-Cmdelta = Trim.Aero.Cmdelta * Elevator.EtaControl * Elevator.AreaFraction;
+if isfield(Trim, 'Control')
+    CLdelta = Trim.Control.CLdelta;
+    Cmdelta = Trim.Control.Cmdelta;
+else
+    CLdelta = Aero.CLdelta * Elevator.EtaControl * Elevator.AreaFraction;
+    Cmdelta = Trim.Aero.Cmdelta * Elevator.EtaControl * Elevator.AreaFraction;
+end
 
 DeltaCL = (Case.NzFinal - 1) * Case.Mass * g ./ (Trim.qbar .* Trim.Sref);
 qhat = (Case.NzFinal - 1) * Geom.cbar * g ./ (2 * V .^ 2);

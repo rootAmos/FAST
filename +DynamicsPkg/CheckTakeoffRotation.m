@@ -19,10 +19,18 @@ else
 end
 
 DxOverC = Gear.XmlgMAC - Aero.XrefMAC;
+if isfield(Elevator, 'CLdeltaEffective') && isfield(Elevator, 'CmdeltaEffective')
+    CLdelta = Elevator.CLdeltaEffective;
+    CmdeltaRef = Elevator.CmdeltaEffective;
+else
+    CLdelta = Aero.CLdelta * Elevator.EtaControl * Elevator.AreaFraction;
+    CmdeltaRef = Aero.Cmdelta * Elevator.EtaControl * Elevator.AreaFraction;
+end
+
 CL = Aero.CL0 + Aero.CLalpha * Case.AlphaGround + ...
-     Aero.CLdelta * Elevator.EtaControl * Elevator.AreaFraction * DeltaElevator;
+     CLdelta * DeltaElevator;
 CmMLG = Aero.Cm0 + Aero.Cmalpha * Case.AlphaGround + ...
-        Aero.Cmdelta * Elevator.EtaControl * Elevator.AreaFraction * DeltaElevator + ...
+        CmdeltaRef * DeltaElevator + ...
         CL * DxOverC;
 
 VR = sqrt(Case.Mass * g * (Case.XcgMAC - Gear.XmlgMAC) / (-Rho * Sref * CmMLG));

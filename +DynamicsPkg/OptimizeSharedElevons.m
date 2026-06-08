@@ -9,12 +9,6 @@ if ~isfield(Surfaces, "SharedTrailingEdge") || ~Surfaces.SharedTrailingEdge
     error("ERROR - OptimizeSharedElevons: Surfaces.SharedTrailingEdge must be true.");
 end
 
-try
-    import casadi.*
-catch
-    error("ERROR - OptimizeSharedElevons: CasADi is not on the MATLAB path.");
-end
-
 Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
 HalfSpan = Aircraft.Specs.Dynamics.Geometry.b / 2;
 MaxStation = Surfaces.MaxModelHalfSpanStation;
@@ -26,46 +20,17 @@ OutboardPanels = BuildStationPanels(10, max(Surfaces.OutboardEtaStations) * MaxS
 PitchCoeff = PanelAreaCoefficients(Aircraft, Surfaces.Elevator, PitchPanels, MaxStation);
 OutboardCoeff = PanelAreaCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
 RollCoeff = PanelRollCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
-
-Opti = casadi.Opti();
-PitchChord = Opti.variable(length(PitchPanels.Inboard), 1);
-DualChord = Opti.variable(length(OutboardPanels.Inboard), 1);
-RollChord = Opti.variable(length(OutboardPanels.Inboard), 1);
+[PitchClCoeff, PitchCmCoeff] = PanelPitchCoefficients(Aircraft, Surfaces.Elevator, PitchPanels, MaxStation);
+[DualClCoeff, DualCmCoeff] = PanelPitchCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
 
 PitchMax = max(Surfaces.Elevator.ChordFractions);
 DualMax = max(Surfaces.DualElevon.ChordFractions);
 RollMax = max(Surfaces.Aileron.ChordFractions);
 OutboardMax = max(DualMax, RollMax);
 
-Opti.subject_to(PitchChord >= 0);
-Opti.subject_to(PitchChord <= PitchMax);
-Opti.subject_to(DualChord >= 0);
-Opti.subject_to(DualChord <= DualMax);
-Opti.subject_to(RollChord >= 0);
-Opti.subject_to(RollChord <= RollMax);
-Opti.subject_to(DualChord + RollChord <= OutboardMax);
-
-PitchArea = PitchCoeff' * PitchChord + OutboardCoeff' * DualChord;
-RollArea = OutboardCoeff' * (DualChord + RollChord);
-RollIntegral = RollCoeff' * (DualChord + RollChord);
-
-ApplyPitchConstraints(Opti, Aircraft, Cases.LongitudinalTrim, PitchArea);
-ApplyPullupConstraints(Opti, Aircraft, Cases.Pullup, PitchArea);
-ApplyPitchConstraints(Opti, Aircraft, Cases.CruiseTrim, PitchArea);
-ApplyRollConstraint(Opti, Aircraft, Cases.TimeToBank, RollIntegral);
-
-PhysicalArea = PitchCoeff' * PitchChord + OutboardCoeff' * DualChord + OutboardCoeff' * RollChord;
-CenterBias = 1.0e-5 * (PitchPanels.Center' * PitchChord + OutboardPanels.Center' * DualChord) / MaxStation;
-Opti.minimize(PhysicalArea + CenterBias);
-Opti.solver('ipopt', struct('print_time', false), struct('print_level', 0));
-Opti.set_initial(PitchChord, 0.05);
-Opti.set_initial(DualChord, 0.05);
-Opti.set_initial(RollChord, 0.05);
-
-Sol = Opti.solve();
-PitchChordValue = full(Sol.value(PitchChord));
-DualChordValue = full(Sol.value(DualChord));
-RollChordValue = full(Sol.value(RollChord));
+[PitchChordValue, DualChordValue, RollChordValue, SolverName, SolverValues] = SolvePanelChords( ...
+    Aircraft, Cases, PitchCoeff, OutboardCoeff, RollCoeff, PitchClCoeff, DualClCoeff, ...
+    PitchCmCoeff, DualCmCoeff, PitchPanels, OutboardPanels, PitchMax, DualMax, RollMax, OutboardMax, MaxStation);
 
 PitchOnlySegments = BuildSegmentsFromPanels(Aircraft, Surfaces.Elevator, PitchPanels, PitchChordValue, MaxStation, "Pitch-only elevon");
 DualSegments = BuildSegmentsFromPanels(Aircraft, Surfaces.DualElevon, OutboardPanels, DualChordValue, MaxStation, "Dual-use elevon");
@@ -78,17 +43,17 @@ Rudder = SizeRudder(Aircraft, Cases.DirectionalTrim, Surfaces.Rudder);
 
 Elevator.Checks = CheckElevator(Aircraft, Cases, Elevator);
 Aileron.Checks = CheckAileron(Aircraft, Cases, Aileron);
-Rudder.Checks = DynamicsPkg.CheckDirectionalTrim(Aircraft, Cases.DirectionalTrim, Rudder);
+Rudder.Checks.Direction = DynamicsPkg.CheckDirectionalTrim(Aircraft, Cases.DirectionalTrim, Rudder);
 
 Elevator.PhysicalAreaFraction = sum(cellfun(@(Segment) Segment.AreaFraction, PitchOnlySegments));
 Aileron.PhysicalAreaFraction = sum(cellfun(@(Segment) Segment.AreaFraction, RollOnlySegments));
 Elevator.MaxDeflection = Elevator.Checks.MaxDeflection;
 Aileron.MaxDeflection = Aileron.Checks.MaxDeflection;
-Rudder.MaxDeflection = abs(Rudder.Checks.Delta);
+Rudder.MaxDeflection = abs(Rudder.Checks.Direction.Delta);
 
 Elevator.Converged = Elevator.Checks.Feasible;
 Aileron.Converged = Aileron.Checks.Feasible;
-Rudder.Converged = Rudder.Checks.Feasible;
+Rudder.Converged = Rudder.Checks.Direction.Feasible;
 DualElevon.Converged = true;
 
 Sizing.Elevator = Elevator;
@@ -99,9 +64,256 @@ Sizing.Converged = Elevator.Converged && Aileron.Converged && Rudder.Converged;
 Sizing.AreaFraction = Elevator.PhysicalAreaFraction + DualElevon.AreaFraction + ...
     Aileron.PhysicalAreaFraction + Rudder.AreaFraction;
 Sizing.Casadi = struct( ...
-    "PitchAreaFraction", full(Sol.value(PitchArea)), ...
-    "RollAreaFraction", full(Sol.value(RollArea)), ...
-    "PhysicalElevonAreaFraction", full(Sol.value(PhysicalArea)));
+    "Solver", SolverName, ...
+    "PitchAreaFraction", SolverValues.PitchArea, ...
+    "PitchCLdelta", SolverValues.PitchCLdelta, ...
+    "PitchCmdelta", SolverValues.PitchCmdelta, ...
+    "RollAreaFraction", SolverValues.RollArea, ...
+    "PhysicalElevonAreaFraction", SolverValues.PhysicalArea);
+
+end
+
+function [PitchChordValue, DualChordValue, RollChordValue, SolverName, Values] = SolvePanelChords( ...
+    Aircraft, Cases, PitchCoeff, OutboardCoeff, RollCoeff, PitchClCoeff, DualClCoeff, ...
+    PitchCmCoeff, DualCmCoeff, PitchPanels, OutboardPanels, PitchMax, DualMax, RollMax, OutboardMax, MaxStation)
+% Use CasADi when available; otherwise solve the same continuous problem with fmincon.
+
+if exist('Opti', 'file') == 2
+    [PitchChordValue, DualChordValue, RollChordValue, Values] = SolvePanelChordsCasadi( ...
+        Aircraft, Cases, PitchCoeff, OutboardCoeff, RollCoeff, PitchClCoeff, DualClCoeff, ...
+        PitchCmCoeff, DualCmCoeff, PitchPanels, OutboardPanels, PitchMax, DualMax, RollMax, OutboardMax, MaxStation);
+    SolverName = "casadi";
+else
+    [PitchChordValue, DualChordValue, RollChordValue, Values] = SolvePanelChordsFmincon( ...
+        Aircraft, Cases, PitchCoeff, OutboardCoeff, RollCoeff, PitchClCoeff, DualClCoeff, ...
+        PitchCmCoeff, DualCmCoeff, PitchPanels, OutboardPanels, PitchMax, DualMax, RollMax, OutboardMax, MaxStation);
+    SolverName = "fmincon";
+end
+
+end
+
+function [PitchChordValue, DualChordValue, RollChordValue, Values] = SolvePanelChordsFmincon( ...
+    Aircraft, Cases, PitchCoeff, OutboardCoeff, RollCoeff, PitchClCoeff, DualClCoeff, ...
+    PitchCmCoeff, DualCmCoeff, PitchPanels, OutboardPanels, PitchMax, DualMax, RollMax, OutboardMax, MaxStation)
+% Continuous fallback for systems where CasADi is not installed.
+
+if exist('fmincon', 'file') ~= 2
+    error("ERROR - OptimizeSharedElevons: neither CasADi nor fmincon is available.");
+end
+
+nPitch = length(PitchCoeff);
+nOutboard = length(OutboardCoeff);
+nvar = nPitch + 2 * nOutboard;
+PitchIndex = 1:nPitch;
+DualIndex = nPitch + (1:nOutboard);
+RollIndex = nPitch + nOutboard + (1:nOutboard);
+
+lb = zeros(nvar, 1);
+ub = [PitchMax * ones(nPitch, 1); DualMax * ones(nOutboard, 1); RollMax * ones(nOutboard, 1)];
+A = zeros(nOutboard, nvar);
+for i = 1:nOutboard
+    A(i, DualIndex(i)) = 1;
+    A(i, RollIndex(i)) = 1;
+end
+b = OutboardMax * ones(nOutboard, 1);
+x0 = 0.25 * ub;
+
+Objective = @(x) PhysicalAreaValue(x, PitchCoeff, OutboardCoeff, PitchPanels, OutboardPanels, ...
+    PitchIndex, DualIndex, RollIndex, MaxStation);
+Nonlinear = @(x) PanelConstraints(x, Aircraft, Cases, RollCoeff, PitchClCoeff, DualClCoeff, ...
+    PitchCmCoeff, DualCmCoeff, PitchIndex, DualIndex, RollIndex);
+
+Options = optimoptions('fmincon', 'Algorithm', 'sqp', 'Display', 'none', ...
+    'MaxFunctionEvaluations', 2.0e4, 'MaxIterations', 400);
+x = fmincon(Objective, x0, A, b, [], [], lb, ub, Nonlinear, Options);
+
+PitchChordValue = x(PitchIndex);
+DualChordValue = x(DualIndex);
+RollChordValue = x(RollIndex);
+Values = PanelValues(PitchChordValue, DualChordValue, RollChordValue, PitchCoeff, OutboardCoeff, ...
+    RollCoeff, PitchClCoeff, DualClCoeff, PitchCmCoeff, DualCmCoeff);
+
+end
+
+function [PitchChordValue, DualChordValue, RollChordValue, Values] = SolvePanelChordsCasadi( ...
+    Aircraft, Cases, PitchCoeff, OutboardCoeff, RollCoeff, PitchClCoeff, DualClCoeff, ...
+    PitchCmCoeff, DualCmCoeff, PitchPanels, OutboardPanels, PitchMax, DualMax, RollMax, OutboardMax, MaxStation)
+% CasADi solve path for machines with CasADi installed on the MATLAB path.
+
+import casadi.*
+
+OptiProblem = Opti();
+PitchChord = OptiProblem.variable(length(PitchPanels.Inboard), 1);
+DualChord = OptiProblem.variable(length(OutboardPanels.Inboard), 1);
+RollChord = OptiProblem.variable(length(OutboardPanels.Inboard), 1);
+
+OptiProblem.subject_to(PitchChord >= 0);
+OptiProblem.subject_to(PitchChord <= PitchMax);
+OptiProblem.subject_to(DualChord >= 0);
+OptiProblem.subject_to(DualChord <= DualMax);
+OptiProblem.subject_to(RollChord >= 0);
+OptiProblem.subject_to(RollChord <= RollMax);
+OptiProblem.subject_to(DualChord + RollChord <= OutboardMax);
+
+PitchCLdelta = PitchClCoeff' * PitchChord + DualClCoeff' * DualChord;
+PitchCmdelta = PitchCmCoeff' * PitchChord + DualCmCoeff' * DualChord;
+RollIntegral = RollCoeff' * (DualChord + RollChord);
+
+ApplyPitchConstraints(OptiProblem, Aircraft, Cases.LongitudinalTrim, PitchCLdelta, PitchCmdelta);
+ApplyPullupConstraints(OptiProblem, Aircraft, Cases.Pullup, PitchCLdelta, PitchCmdelta);
+ApplyPitchConstraints(OptiProblem, Aircraft, Cases.CruiseTrim, PitchCLdelta, PitchCmdelta);
+ApplyRollConstraint(OptiProblem, Aircraft, Cases.TimeToBank, RollIntegral);
+
+PhysicalArea = PitchCoeff' * PitchChord + OutboardCoeff' * DualChord + OutboardCoeff' * RollChord;
+CenterBias = 1.0e-5 * (PitchPanels.Center' * PitchChord + OutboardPanels.Center' * DualChord) / MaxStation;
+OptiProblem.minimize(PhysicalArea + CenterBias);
+OptiProblem.solver('ipopt', struct('print_time', false), struct('print_level', 0));
+OptiProblem.set_initial(PitchChord, 0.05);
+OptiProblem.set_initial(DualChord, 0.05);
+OptiProblem.set_initial(RollChord, 0.05);
+
+Sol = OptiProblem.solve();
+PitchChordValue = full(Sol.value(PitchChord));
+DualChordValue = full(Sol.value(DualChord));
+RollChordValue = full(Sol.value(RollChord));
+Values = PanelValues(PitchChordValue, DualChordValue, RollChordValue, PitchCoeff, OutboardCoeff, ...
+    RollCoeff, PitchClCoeff, DualClCoeff, PitchCmCoeff, DualCmCoeff);
+
+end
+
+function [CLCoeff, CmCoeff] = PanelPitchCoefficients(Aircraft, Surface, Panels, MaxStation)
+% Per-unit-chord pitch derivatives from local trailing-edge moment arms.
+
+Aero = Aircraft.Specs.Dynamics.Longitudinal;
+Geom = Aircraft.Specs.Dynamics.Geometry;
+Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
+HalfSpan = Geom.b / 2;
+
+CenterLeadingEdgeX = interp1(Surface.ChordEta, Surface.ChordLeadingEdgeX, 0, "linear", "extrap");
+Xref = CenterLeadingEdgeX + Aero.XrefMAC * Geom.cbar;
+
+CLCoeff = zeros(length(Panels.Inboard), 1);
+CmCoeff = zeros(length(Panels.Inboard), 1);
+
+for ipanel = 1:length(CLCoeff)
+    y = linspace(Panels.Inboard(ipanel), Panels.Outboard(ipanel), 5) / MaxStation * HalfSpan;
+    Eta = y / HalfSpan;
+    LocalChord = interp1(Surface.ChordEta, Surface.ChordLength, Eta, "linear", "extrap");
+    LocalTrailingEdgeX = interp1(Surface.ChordEta, Surface.ChordTrailingEdgeX, Eta, "linear", "extrap");
+    UnitControlChord = LocalChord;
+    ControlCenterX = LocalTrailingEdgeX - 0.5 * UnitControlChord;
+    if isfield(Surface, 'SectionClDelta')
+        SectionClDelta = Surface.SectionClDelta;
+    else
+        SectionClDelta = Aero.CLdelta;
+    end
+    SectionLift = SectionClDelta * Surface.EtaControl * LocalChord;
+
+    CLCoeff(ipanel) = 2 * trapz(y, SectionLift) / Sref;
+    CmCoeff(ipanel) = -2 * trapz(y, SectionLift .* (ControlCenterX - Xref)) / (Sref * Geom.cbar);
+end
+
+end
+
+function [Objective] = PhysicalAreaValue(x, PitchCoeff, OutboardCoeff, PitchPanels, OutboardPanels, ...
+    PitchIndex, DualIndex, RollIndex, MaxStation)
+% Objective shared by the continuous panel solvers.
+
+PitchChord = x(PitchIndex);
+DualChord = x(DualIndex);
+RollChord = x(RollIndex);
+PhysicalArea = PitchCoeff' * PitchChord + OutboardCoeff' * DualChord + OutboardCoeff' * RollChord;
+CenterBias = 1.0e-5 * (PitchPanels.Center' * PitchChord + OutboardPanels.Center' * DualChord) / MaxStation;
+Objective = PhysicalArea + CenterBias;
+
+end
+
+function [c, ceq] = PanelConstraints(x, Aircraft, Cases, RollCoeff, PitchClCoeff, DualClCoeff, ...
+    PitchCmCoeff, DualCmCoeff, PitchIndex, DualIndex, RollIndex)
+% Nonlinear authority constraints for the fmincon panel solve.
+
+PitchChord = x(PitchIndex);
+DualChord = x(DualIndex);
+RollChord = x(RollIndex);
+PitchCLdelta = PitchClCoeff' * PitchChord + DualClCoeff' * DualChord;
+PitchCmdelta = PitchCmCoeff' * PitchChord + DualCmCoeff' * DualChord;
+RollIntegral = RollCoeff' * (DualChord + RollChord);
+
+c = [PitchConstraintValues(Aircraft, Cases.LongitudinalTrim, PitchCLdelta, PitchCmdelta); ...
+     PullupConstraintValues(Aircraft, Cases.Pullup, PitchCLdelta, PitchCmdelta); ...
+     PitchConstraintValues(Aircraft, Cases.CruiseTrim, PitchCLdelta, PitchCmdelta); ...
+     RollConstraintValue(Aircraft, Cases.TimeToBank, RollIntegral)];
+ceq = [];
+
+end
+
+function [Values] = PanelValues(PitchChord, DualChord, RollChord, PitchCoeff, OutboardCoeff, ...
+    RollCoeff, PitchClCoeff, DualClCoeff, PitchCmCoeff, DualCmCoeff)
+% Report optimized panel aggregate values.
+
+Values.PitchArea = PitchCoeff' * PitchChord + OutboardCoeff' * DualChord;
+Values.PitchCLdelta = PitchClCoeff' * PitchChord + DualClCoeff' * DualChord;
+Values.PitchCmdelta = PitchCmCoeff' * PitchChord + DualCmCoeff' * DualChord;
+Values.RollArea = OutboardCoeff' * (DualChord + RollChord);
+Values.RollIntegral = RollCoeff' * (DualChord + RollChord);
+Values.PhysicalArea = PitchCoeff' * PitchChord + OutboardCoeff' * DualChord + OutboardCoeff' * RollChord;
+
+end
+
+function [c] = PitchConstraintValues(Aircraft, Case, CLdelta, CmdeltaRef)
+% Convert trim limits into fmincon c <= 0 form.
+
+[Delta, Alpha] = PitchTrimExpressions(Aircraft, Case, CLdelta, CmdeltaRef);
+c = [Delta - Case.MaxDeflection; ...
+    -Delta - Case.MaxDeflection; ...
+    Alpha - Case.AlphaMax; ...
+    -Alpha - Case.AlphaMax];
+
+end
+
+function [c] = PullupConstraintValues(Aircraft, Case, CLdelta, CmdeltaRef)
+% Convert pull-up limits into fmincon c <= 0 form.
+
+g = 9.81;
+Aero = Aircraft.Specs.Dynamics.Longitudinal;
+Geom = Aircraft.Specs.Dynamics.Geometry;
+Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
+
+[DeltaTrim, AlphaTrim, AeroCg, TAS, qbar, Cmdelta] = PitchTrimExpressions(Aircraft, Case, CLdelta, CmdeltaRef);
+DeltaCL = (Case.NzFinal - 1) * Case.Mass * g / (qbar * Sref);
+qhat = (Case.NzFinal - 1) * Geom.cbar * g / (2 * TAS ^ 2);
+
+b1 = DeltaCL - Aero.CLq * qhat;
+b2 = -Aero.Cmq * qhat;
+DetA = Aero.CLalpha * Cmdelta - AeroCg.Cmalpha * CLdelta;
+DeltaAlpha = (b1 * Cmdelta - CLdelta * b2) / DetA;
+DeltaElevator = (Aero.CLalpha * b2 - AeroCg.Cmalpha * b1) / DetA;
+
+AlphaFinal = AlphaTrim + DeltaAlpha;
+DeltaFinal = DeltaTrim + DeltaElevator;
+c = [DeltaFinal - Case.MaxDeflection; ...
+    -DeltaFinal - Case.MaxDeflection; ...
+    AlphaFinal - Case.AlphaMax; ...
+    -AlphaFinal - Case.AlphaMax];
+
+end
+
+function [c] = RollConstraintValue(Aircraft, Case, RollIntegral)
+% Convert time-to-bank authority into fmincon c <= 0 form.
+
+Lat = Aircraft.Specs.Dynamics.Lateral;
+Geom = Aircraft.Specs.Dynamics.Geometry;
+Inertia = Aircraft.Specs.Dynamics.Inertia;
+Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
+
+[~, V, ~, ~, ~, Rho, ~] = MissionSegsPkg.ComputeFltCon(Case.Alt, 0, Case.VelType, Case.Vel);
+qbar = 0.5 * Rho * V ^ 2;
+Lp = qbar * Sref * Geom.b ^ 2 * Lat.Clp / (2 * V * Inertia.Ixx);
+BankGainPerRollIntegral = abs((2 * V / Geom.b) * ...
+    ((2 * 0.85 / (Sref * Geom.b)) / Lat.Clp) * ...
+    (Case.TimeLimit + (1 / Lp) * (1 - exp(Lp * Case.TimeLimit))));
+RequiredRollIntegral = Case.BankTarget / (Case.MaxDeflection * BankGainPerRollIntegral);
+c = RequiredRollIntegral - RollIntegral;
 
 end
 
@@ -148,10 +360,10 @@ end
 
 end
 
-function ApplyPitchConstraints(Opti, Aircraft, Case, AreaFraction)
+function ApplyPitchConstraints(Opti, Aircraft, Case, CLdelta, CmdeltaRef)
 % Apply trim deflection and alpha constraints for one longitudinal case.
 
-[Delta, Alpha] = PitchTrimExpressions(Aircraft, Case, AreaFraction);
+[Delta, Alpha] = PitchTrimExpressions(Aircraft, Case, CLdelta, CmdeltaRef);
 Opti.subject_to(Delta <= Case.MaxDeflection);
 Opti.subject_to(-Delta <= Case.MaxDeflection);
 Opti.subject_to(Alpha <= Case.AlphaMax);
@@ -159,7 +371,7 @@ Opti.subject_to(-Alpha <= Case.AlphaMax);
 
 end
 
-function ApplyPullupConstraints(Opti, Aircraft, Case, AreaFraction)
+function ApplyPullupConstraints(Opti, Aircraft, Case, CLdelta, CmdeltaRef)
 % Apply pull-up final deflection and alpha constraints.
 
 g = 9.81;
@@ -167,11 +379,8 @@ Aero = Aircraft.Specs.Dynamics.Longitudinal;
 Geom = Aircraft.Specs.Dynamics.Geometry;
 Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
 
-[DeltaTrim, AlphaTrim, AeroCg, TAS, qbar] = PitchTrimExpressions(Aircraft, Case, AreaFraction);
+[DeltaTrim, AlphaTrim, AeroCg, TAS, qbar, Cmdelta] = PitchTrimExpressions(Aircraft, Case, CLdelta, CmdeltaRef);
 
-EtaArea = CaseElevatorEta(Aero, AreaFraction);
-CLdelta = Aero.CLdelta * EtaArea;
-Cmdelta = AeroCg.Cmdelta * EtaArea;
 DeltaCL = (Case.NzFinal - 1) * Case.Mass * g / (qbar * Sref);
 qhat = (Case.NzFinal - 1) * Geom.cbar * g / (2 * TAS ^ 2);
 
@@ -210,7 +419,7 @@ Opti.subject_to(RollIntegral >= RequiredRollIntegral);
 
 end
 
-function [DeltaTrim, AlphaTrim, AeroCg, TAS, qbar] = PitchTrimExpressions(Aircraft, Case, AreaFraction)
+function [DeltaTrim, AlphaTrim, AeroCg, TAS, qbar, Cmdelta] = PitchTrimExpressions(Aircraft, Case, CLdelta, CmdeltaRef)
 % Express linear trim equations as CasADi-compatible scalar algebra.
 
 g = 9.81;
@@ -227,20 +436,11 @@ AeroCg.Cmalpha = Aero.Cmalpha + Aero.CLalpha * DxOverC;
 AeroCg.Cmdelta = Aero.Cmdelta + Aero.CLdelta * DxOverC;
 AeroCg.Cm0 = Aero.Cm0 + Aero.CL0 * DxOverC;
 
-EtaArea = CaseElevatorEta(Aero, AreaFraction);
-CLdelta = Aero.CLdelta * EtaArea;
-Cmdelta = AeroCg.Cmdelta * EtaArea;
+Cmdelta = CmdeltaRef + CLdelta * DxOverC;
 
 DeltaTrim = -(AeroCg.Cm0 * Aero.CLalpha + AeroCg.Cmalpha * CLtrim) / ...
     (Cmdelta * Aero.CLalpha - AeroCg.Cmalpha * CLdelta);
 AlphaTrim = (CLtrim - CLdelta * DeltaTrim) / Aero.CLalpha;
-
-end
-
-function [EtaArea] = CaseElevatorEta(Aero, AreaFraction) %#ok<INUSD>
-% Keep elevator effectiveness centralized for CasADi expressions.
-
-EtaArea = 0.85 * AreaFraction;
 
 end
 
@@ -263,6 +463,10 @@ for ipanel = 1:length(ChordFractions)
     Segment.ChordFraction = ChordFractions(ipanel);
     Segment.AreaFraction = PanelAreaCoefficients(Aircraft, Surface, struct( ...
         "Inboard", Panels.Inboard(ipanel), "Outboard", Panels.Outboard(ipanel)), MaxStation) * ChordFractions(ipanel);
+    [CLCoeff, CmCoeff] = PanelPitchCoefficients(Aircraft, Surface, struct( ...
+        "Inboard", Panels.Inboard(ipanel), "Outboard", Panels.Outboard(ipanel)), MaxStation);
+    Segment.CLdeltaEffective = CLCoeff * ChordFractions(ipanel);
+    Segment.CmdeltaEffective = CmCoeff * ChordFractions(ipanel);
     Segments{end + 1, 1} = Segment; %#ok<AGROW>
 end
 
@@ -283,6 +487,8 @@ Trial.YOutboard = max(cellfun(@(Segment) Segment.YOutboard, Segments));
 Trial.SpanFraction = max(cellfun(@(Segment) Segment.SpanFraction, Segments));
 Trial.ChordFraction = max(cellfun(@(Segment) Segment.ChordFraction, Segments));
 Trial.AreaFraction = sum(cellfun(@(Segment) Segment.AreaFraction, Segments));
+Trial.CLdeltaEffective = sum(cellfun(@(Segment) Segment.CLdeltaEffective, Segments));
+Trial.CmdeltaEffective = sum(cellfun(@(Segment) Segment.CmdeltaEffective, Segments));
 Trial.EtaControl = Surface.EtaControl;
 
 end

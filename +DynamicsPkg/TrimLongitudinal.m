@@ -50,8 +50,13 @@ Aero.Cmdelta = AeroRef.Cmdelta + AeroRef.CLdelta .* DxOverC;
 Aero.Cm0 = AeroRef.Cm0 + AeroRef.CL0 .* DxOverC;
 
 Elevon = TrimCase.Elevon;
-CLdelta = Aero.CLdelta .* Elevon.EtaControl .* Elevon.AreaFraction;
-Cmdelta = Aero.Cmdelta .* Elevon.EtaControl .* Elevon.AreaFraction;
+if isfield(Elevon, 'CLdeltaEffective') && isfield(Elevon, 'CmdeltaEffective')
+    CLdelta = Elevon.CLdeltaEffective;
+    Cmdelta = Elevon.CmdeltaEffective + Elevon.CLdeltaEffective .* DxOverC;
+else
+    CLdelta = Aero.CLdelta .* Elevon.EtaControl .* Elevon.AreaFraction;
+    Cmdelta = Aero.Cmdelta .* Elevon.EtaControl .* Elevon.AreaFraction;
+end
 
 % Nelson, Eq. 2.51: elevator/elevon angle required to trim at CLtrim.
 DeltaTrim = -(Aero.Cm0 .* Aero.CLalpha + Aero.Cmalpha .* CLtrim) ./ ...
@@ -88,6 +93,8 @@ Trim.L_D = CLtrim ./ CDtrim;
 Trim.Feasible = abs(DeltaTrim) <= MaxDeflection;
 Trim.MaxDeflection = MaxDeflection;
 Trim.Elevon = Elevon;
+Trim.Control.CLdelta = CLdelta;
+Trim.Control.Cmdelta = Cmdelta;
 Trim.Aero = Aero;
 Trim.AeroRef = AeroRef;
 Trim.XrefMAC = XrefMAC;
