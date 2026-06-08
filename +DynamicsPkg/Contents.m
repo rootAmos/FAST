@@ -14,8 +14,6 @@
 % TrimLongitudinal     - DynamicsPkg.TrimLongitudinal is a function.
 % OptimizeSharedElevons - DynamicsPkg.OptimizeSharedElevons is a function.
 % PlotSharedElevonAreas - DynamicsPkg.PlotSharedElevonAreas is a function.
-% SizeElevon           - DynamicsPkg.SizeElevon is a function.
-% SizeElevons          - DynamicsPkg.SizeElevons is a function.
 % SizeControlSurfaces  - DynamicsPkg.SizeControlSurfaces is a function.
 % ControlSurfacePenalty - DynamicsPkg.ControlSurfacePenalty is a function.
 % SweepTrimEnvelope    - DynamicsPkg.SweepTrimEnvelope is a function.

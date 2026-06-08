@@ -92,56 +92,46 @@ function [ElevatorSizing, AileronSizing, DualSizing] = SizeSharedElevonGrid(Airc
 PitchOutEtaStations = Elevator.EtaStations(:);
 OutboardEtaStations = DualElevon.EtaStations(:);
 HalfSpan = Aircraft.Specs.Dynamics.Geometry.b / 2;
-BestObjective = Inf;
 BestViolation = Inf;
 BestFallbackArea = Inf;
 Best = struct();
 Converged = 0;
 
-for ipitchOut = 1:length(PitchOutEtaStations)
-    for idualIn = 1:length(OutboardEtaStations) - 2
-        for idualOut = idualIn + 1:length(OutboardEtaStations) - 1
-            for irollOut = idualOut + 1:length(OutboardEtaStations)
-                for ipitchChord = 1:length(Elevator.ChordFractions)
-                    for idualChord = 1:length(DualElevon.ChordFractions)
-                        for irollChord = 1:length(Aileron.ChordFractions)
-                            PitchOnly = BuildPlacedSegment(Aircraft, Elevator, 0, PitchOutEtaStations(ipitchOut), ...
-                                Elevator.ChordFractions(ipitchChord), "Pitch-only elevon");
-                            Dual = BuildPlacedSegment(Aircraft, DualElevon, OutboardEtaStations(idualIn), OutboardEtaStations(idualOut), ...
-                                DualElevon.ChordFractions(idualChord), "Dual-use elevon");
-                            RollOnly = BuildPlacedSegment(Aircraft, Aileron, OutboardEtaStations(idualOut), OutboardEtaStations(irollOut), ...
-                                Aileron.ChordFractions(irollChord), "Roll-only elevon");
+PitchSegments = BuildSharedSegmentCache(Aircraft, Elevator, 0, PitchOutEtaStations, ...
+    Elevator.ChordFractions(:), "Pitch-only elevon");
+DualSegments = BuildSharedSegmentCache(Aircraft, DualElevon, OutboardEtaStations, OutboardEtaStations, ...
+    DualElevon.ChordFractions(:), "Dual-use elevon");
+RollSegments = BuildSharedSegmentCache(Aircraft, Aileron, OutboardEtaStations, OutboardEtaStations, ...
+    Aileron.ChordFractions(:), "Roll-only elevon");
+Candidates = BuildSharedElevonCandidates(PitchSegments, DualSegments, RollSegments, HalfSpan);
+[~, EvaluationOrder] = sort(Candidates.Objective);
 
-                            PitchTrial = CombineSegments(Elevator, {PitchOnly, Dual}, "Pitch Elevon");
-                            RollTrial = CombineSegments(Aileron, {Dual, RollOnly}, "Roll Elevon");
-                            PitchChecks = CheckElevatorFunction(PitchTrial);
-                            RollChecks = CheckAileronFunction(RollTrial);
+for iorder = 1:length(EvaluationOrder)
+    icandidate = EvaluationOrder(iorder);
+    PitchOnly = PitchSegments{Candidates.PitchOutIndex(icandidate), Candidates.PitchChordIndex(icandidate)};
+    Dual = DualSegments{Candidates.DualInIndex(icandidate), Candidates.DualOutIndex(icandidate), Candidates.DualChordIndex(icandidate)};
+    RollOnly = RollSegments{Candidates.DualOutIndex(icandidate), Candidates.RollOutIndex(icandidate), Candidates.RollChordIndex(icandidate)};
 
-                            PhysicalArea = PitchOnly.AreaFraction + Dual.AreaFraction + RollOnly.AreaFraction;
-                            PitchCenterBias = 1.0e-3 * mean([PitchOnly.YInboard, Dual.YOutboard]) / HalfSpan;
-                            PairFeasible = PitchChecks.Feasible && RollChecks.Feasible;
+    PitchTrial = CombineSegments(Elevator, {PitchOnly, Dual}, "Pitch Elevon");
+    RollTrial = CombineSegments(Aileron, {Dual, RollOnly}, "Roll Elevon");
+    PitchChecks = CheckElevatorFunction(PitchTrial);
+    RollChecks = CheckAileronFunction(RollTrial);
 
-                            if PairFeasible
-                                Objective = PhysicalArea + PitchCenterBias;
-                                if Objective < BestObjective
-                                    BestObjective = Objective;
-                                    Best = PackSharedBest(PitchTrial, RollTrial, Dual, PitchChecks, RollChecks, PhysicalArea);
-                                    Converged = 1;
-                                end
-                            elseif ~Converged
-                                PairViolation = max(PitchChecks.MaxDeflection, RollChecks.MaxDeflection);
-                                if PairViolation < BestViolation || ...
-                                        (abs(PairViolation - BestViolation) < 1.0e-12 && PhysicalArea < BestFallbackArea)
-                                    BestViolation = PairViolation;
-                                    BestFallbackArea = PhysicalArea;
-                                    Best = PackSharedBest(PitchTrial, RollTrial, Dual, PitchChecks, RollChecks, PhysicalArea);
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
+    PhysicalArea = Candidates.PhysicalArea(icandidate);
+    PairFeasible = PitchChecks.Feasible && RollChecks.Feasible;
+
+    if PairFeasible
+        Best = PackSharedBest(PitchTrial, RollTrial, Dual, PitchChecks, RollChecks, PhysicalArea);
+        Converged = 1;
+        break
+    end
+
+    PairViolation = max(PitchChecks.MaxDeflection, RollChecks.MaxDeflection);
+    if PairViolation < BestViolation || ...
+            (abs(PairViolation - BestViolation) < 1.0e-12 && PhysicalArea < BestFallbackArea)
+        BestViolation = PairViolation;
+        BestFallbackArea = PhysicalArea;
+        Best = PackSharedBest(PitchTrial, RollTrial, Dual, PitchChecks, RollChecks, PhysicalArea);
     end
 end
 
@@ -150,6 +140,88 @@ AileronSizing = Best.Aileron;
 DualSizing = Best.Dual;
 ElevatorSizing.Converged = Converged && Best.PitchChecks.Feasible;
 AileronSizing.Converged = Converged && Best.RollChecks.Feasible;
+
+end
+
+function [Segments] = BuildSharedSegmentCache(Aircraft, Surface, EtaInValues, EtaOutValues, ChordFractions, Name)
+% Cache the physical geometry for each unique station/chord segment.
+
+if isscalar(EtaInValues)
+    Segments = cell(length(EtaOutValues), length(ChordFractions));
+    for iout = 1:length(EtaOutValues)
+        for ichord = 1:length(ChordFractions)
+            Segments{iout, ichord} = BuildPlacedSegment(Aircraft, Surface, ...
+                EtaInValues, EtaOutValues(iout), ChordFractions(ichord), Name);
+        end
+    end
+    return
+end
+
+Segments = cell(length(EtaInValues), length(EtaOutValues), length(ChordFractions));
+for iin = 1:length(EtaInValues)
+    for iout = 1:length(EtaOutValues)
+        if EtaOutValues(iout) <= EtaInValues(iin)
+            continue
+        end
+        for ichord = 1:length(ChordFractions)
+            Segments{iin, iout, ichord} = BuildPlacedSegment(Aircraft, Surface, ...
+                EtaInValues(iin), EtaOutValues(iout), ChordFractions(ichord), Name);
+        end
+    end
+end
+
+end
+
+function [Candidates] = BuildSharedElevonCandidates(PitchSegments, DualSegments, RollSegments, HalfSpan)
+% Build the valid shared-elevon candidate table before running authority checks.
+
+[npitchOut, npitchChord] = size(PitchSegments);
+[~, noutboard, ndualChord] = size(DualSegments);
+[~, ~, nrollChord] = size(RollSegments);
+nchordCombos = npitchChord * ndualChord * nrollChord;
+nstationCombos = npitchOut * nchoosek(noutboard, 3);
+ncombo = nstationCombos * nchordCombos;
+
+Candidates.PitchOutIndex = zeros(ncombo, 1);
+Candidates.DualInIndex = zeros(ncombo, 1);
+Candidates.DualOutIndex = zeros(ncombo, 1);
+Candidates.RollOutIndex = zeros(ncombo, 1);
+Candidates.PitchChordIndex = zeros(ncombo, 1);
+Candidates.DualChordIndex = zeros(ncombo, 1);
+Candidates.RollChordIndex = zeros(ncombo, 1);
+Candidates.PhysicalArea = zeros(ncombo, 1);
+Candidates.Objective = zeros(ncombo, 1);
+
+icandidate = 0;
+for ipitchOut = 1:npitchOut
+    for idualIn = 1:noutboard - 2
+        for idualOut = idualIn + 1:noutboard - 1
+            for irollOut = idualOut + 1:noutboard
+                for ipitchChord = 1:npitchChord
+                    PitchOnly = PitchSegments{ipitchOut, ipitchChord};
+                    for idualChord = 1:ndualChord
+                        Dual = DualSegments{idualIn, idualOut, idualChord};
+                        for irollChord = 1:nrollChord
+                            RollOnly = RollSegments{idualOut, irollOut, irollChord};
+                            icandidate = icandidate + 1;
+
+                            Candidates.PitchOutIndex(icandidate) = ipitchOut;
+                            Candidates.DualInIndex(icandidate) = idualIn;
+                            Candidates.DualOutIndex(icandidate) = idualOut;
+                            Candidates.RollOutIndex(icandidate) = irollOut;
+                            Candidates.PitchChordIndex(icandidate) = ipitchChord;
+                            Candidates.DualChordIndex(icandidate) = idualChord;
+                            Candidates.RollChordIndex(icandidate) = irollChord;
+                            Candidates.PhysicalArea(icandidate) = PitchOnly.AreaFraction + Dual.AreaFraction + RollOnly.AreaFraction;
+                            PitchCenterBias = 1.0e-3 * mean([PitchOnly.YInboard, Dual.YOutboard]) / HalfSpan;
+                            Candidates.Objective(icandidate) = Candidates.PhysicalArea(icandidate) + PitchCenterBias;
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
 
 end
 

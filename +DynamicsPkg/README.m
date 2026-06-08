@@ -26,22 +26,16 @@ function [] = README()
 %     Aircraft.Specs.Dynamics.Longitudinal.XrefMAC = 0.25;
 %     TrimCase = DynamicsPkg.SweepTrimEnvelope(Aircraft);
 %     TrimCase.XcgMAC = 0.32;
-%     TrimCase.Elevon.EtaControl = 0.85;
-%     TrimCase.Elevon.ChordFraction = 0.25;
-%     Sizing = DynamicsPkg.SizeElevon(Aircraft, TrimCase);
-%     Aircraft = DynamicsPkg.ControlSurfacePenalty(Aircraft, Sizing);
+%     Trim = DynamicsPkg.TrimLongitudinal(Aircraft, TrimCase);
 %
-% Paper-style separated control-surface sizing workflow:
+% BWB shared-elevon sizing workflow:
 %
 %     Cases = DynamicsPkg.BuildControlSizingCases(Aircraft);
 %     Surfaces.Elevator.EtaControl = 0.85;
-%     Surfaces.Elevator.ChordFractions = linspace(0.10, 0.35, 26)';
-%     Surfaces.Elevator.SpanFractions = linspace(0.05, 0.60, 112)';
+%     Surfaces.Elevator.ChordFractions = 0.25;
 %     Surfaces.Aileron.EtaControl = 0.85;
-%     Surfaces.Aileron.ChordFractions = linspace(0.08, 0.30, 20)';
-%     Surfaces.Aileron.SpanFractions = linspace(0.05, 1.00, 20)';
-%     Surfaces.Aileron.YInboardMin = 0.65 * Aircraft.Specs.Dynamics.Geometry.b / 2;
-%     Surfaces.Aileron.YOutboard = 0.94 * Aircraft.Specs.Dynamics.Geometry.b / 2;
+%     Surfaces.DualElevon.ChordFractions = 0.40;
+%     Surfaces.Aileron.ChordFractions = 0.40;
 %     Surfaces.Aileron.ReferenceChord = ...
 %         (Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS) / Aircraft.Specs.Dynamics.Geometry.b;
 %     Surfaces.Aileron.SectionClDelta = 2.5;
@@ -65,8 +59,8 @@ function [] = README()
 % moments to the CG. The shift is applied to Cm0, Cmalpha, and Cmdelta
 % before Eq. 2.47-2.51 are evaluated.
 %
-% Control-surface area is approximated as span fraction times chord
-% fraction. The trim derivatives use EtaControl * AreaFraction directly.
+% Control-surface area is integrated from the scaled BWB chord distribution
+% when physical panel placement is available.
 %
 % Trim drag is modeled as:
 %

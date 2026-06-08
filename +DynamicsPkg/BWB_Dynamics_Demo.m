@@ -105,14 +105,13 @@ end
 
 ChordFile = fullfile(OutputDir, "bwb_chord_vs_span.csv");
 ChordTable = readtable(ChordFile);
-ChordArea = abs(trapz(ChordTable.span_station_x, ChordTable.chord_length));
-ChordScale = (Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS) / ChordArea;
+MaxModelHalfSpanStation = max(abs(ChordTable.span_station_x));
+ChordScale = (Aircraft.Specs.Dynamics.Geometry.b / 2) / MaxModelHalfSpanStation;
 RightChord = ChordTable(ChordTable.normalized_span_eta >= 0, :);
 ChordEta = RightChord.normalized_span_eta;
 ChordLength = RightChord.chord_length * ChordScale;
 ChordLeadingEdgeX = -RightChord.leading_edge_y * ChordScale;
 ChordTrailingEdgeX = -RightChord.trailing_edge_y * ChordScale;
-MaxModelHalfSpanStation = max(abs(ChordTable.span_station_x));
 
 %% PAPER-STYLE CONTROL SURFACE SIZING %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -120,18 +119,24 @@ MaxModelHalfSpanStation = max(abs(ChordTable.span_station_x));
 % Build named control cases from the Flying-V control sizing method.
 Cases = DynamicsPkg.BuildControlSizingCases(Aircraft);
 
-% Pitch, dual-use, and roll elevons use station 0-5 or 10-outboard only.
+% Pitch elevons use 0-10 ft; dual-use and roll elevons use 20-45 ft.
 StationToEta = @(Station) Station / MaxModelHalfSpanStation;
-Surfaces.ForbiddenEta = StationToEta([5, 10]);
+FtToStation = @(DistanceFt) (DistanceFt / 3.280839895) / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation;
+FtPerM = 3.280839895;
+MaxControlSurfaceSpan = 5 / FtPerM;
+Surfaces.ForbiddenEta = StationToEta([FtToStation(10), FtToStation(20)]);
 Surfaces.MaxModelHalfSpanStation = MaxModelHalfSpanStation;
+Surfaces.MaxControlSurfaceSpan = MaxControlSurfaceSpan;
 Surfaces.PanelStationWidth = 0.2;
-Surfaces.OutboardEtaStations = StationToEta([10, 11, 12, 13, 14, 15, 16, 16.45])';
-Surfaces.PitchOutEtaStations = StationToEta([1, 2, 3, 4, 5])';
+Surfaces.PitchStationRange = FtToStation([0, 10]);
+Surfaces.OutboardStationRange = FtToStation([20, 45]);
+Surfaces.OutboardEtaStations = StationToEta(linspace(Surfaces.OutboardStationRange(1), Surfaces.OutboardStationRange(2), 8))';
+Surfaces.PitchOutEtaStations = StationToEta(linspace(Surfaces.PitchStationRange(1), Surfaces.PitchStationRange(2), 6))';
 
 Surfaces.SharedTrailingEdge = 1;
 Surfaces.Elevator.Name = "Pitch Elevon";
 Surfaces.Elevator.EtaControl = 0.85;
-Surfaces.Elevator.ChordFractions = [0.60; 0.75; 0.90];
+Surfaces.Elevator.ChordFractions = 0.25;
 Surfaces.Elevator.EtaStations = Surfaces.PitchOutEtaStations;
 Surfaces.Elevator.ChordEta = ChordEta;
 Surfaces.Elevator.ChordLength = ChordLength;
@@ -142,7 +147,7 @@ Surfaces.Elevator.UsePhysicalArea = 1;
 
 Surfaces.DualElevon.Name = "Dual-Use Elevon";
 Surfaces.DualElevon.EtaControl = 0.85;
-Surfaces.DualElevon.ChordFractions = [0.60; 0.75; 0.90];
+Surfaces.DualElevon.ChordFractions = 0.40;
 Surfaces.DualElevon.EtaStations = Surfaces.OutboardEtaStations;
 Surfaces.DualElevon.ChordEta = ChordEta;
 Surfaces.DualElevon.ChordLength = ChordLength;
@@ -153,7 +158,7 @@ Surfaces.DualElevon.UsePhysicalArea = 1;
 
 Surfaces.Aileron.Name = "Roll Elevon";
 Surfaces.Aileron.EtaControl = 0.85;
-Surfaces.Aileron.ChordFractions = [0.25; 0.35; 0.50];
+Surfaces.Aileron.ChordFractions = 0.40;
 Surfaces.Aileron.EtaStations = Surfaces.OutboardEtaStations;
 Surfaces.Aileron.ReferenceChord = (Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS) / Aircraft.Specs.Dynamics.Geometry.b;
 Surfaces.Aileron.ChordEta = ChordEta;
@@ -168,11 +173,11 @@ Surfaces.Rudder.ChordFractions = linspace(0.10, 0.35, 6)';
 Surfaces.Rudder.SpanFractions = linspace(0.10, 0.80, 15)';
 
 % Optimize the shared pitch/dual-use/roll elevon layout against the checks.
-SizingSweep = DynamicsPkg.OptimizeSharedElevons(Aircraft, Cases, Surfaces);
-SizingOpt = SizingSweep;
+SizingOpt = DynamicsPkg.OptimizeSharedElevons(Aircraft, Cases, Surfaces);
+SizingSweep = SizingOpt;
 
 if RunCgSweep
-    XcgMAC = linspace(Cases.LongitudinalTrim.XcgMAC, Cases.CruiseTrim.XcgMAC, 3)';
+    XcgMAC = linspace(Aircraft.Specs.Dynamics.CG.ForwardMAC, Aircraft.Specs.Dynamics.CG.AftMAC, 3)';
     AreaFraction = zeros(size(XcgMAC));
     Converged = zeros(size(XcgMAC));
 
@@ -187,43 +192,44 @@ if RunCgSweep
     end
 else
     XcgMAC = Cases.LongitudinalTrim.XcgMAC;
-    AreaFraction = SizingSweep.Elevator.AreaFraction;
-    Converged = SizingSweep.Converged;
+    AreaFraction = SizingOpt.Elevator.AreaFraction;
+    Converged = SizingOpt.Converged;
 end
 
 CgSweep.XcgMAC = XcgMAC;
 CgSweep.AreaFraction = AreaFraction;
 CgSweep.Converged = Converged;
 
-fprintf(1, "Required pitch authority area fraction: %.3f\n", SizingSweep.Elevator.AreaFraction);
-fprintf(1, "Selected pitch elevon option: %s\n", SizingSweep.Elevator.Name);
-fprintf(1, "Required roll authority area fraction: %.3f\n", SizingSweep.Aileron.AreaFraction);
-fprintf(1, "Physical pitch-only elevon area fraction: %.3f\n", SizingSweep.Elevator.PhysicalAreaFraction);
-fprintf(1, "Physical dual-use elevon area fraction: %.3f\n", SizingSweep.DualElevon.AreaFraction);
-fprintf(1, "Physical roll-only elevon area fraction: %.3f\n", SizingSweep.Aileron.PhysicalAreaFraction);
-fprintf(1, "Required rudder area fraction: %.3f\n", SizingSweep.Rudder.AreaFraction);
-fprintf(1, "Total required control area fraction: %.3f\n", SizingSweep.AreaFraction);
-fprintf(1, "Maximum selected elevator deflection: %.2f deg\n", max(abs([SizingSweep.Elevator.Checks.Trim.Delta; SizingSweep.Elevator.Checks.Pullup.DeltaFinal; SizingSweep.Elevator.Checks.Cruise.Delta])) * 180 / pi);
-fprintf(1, "Selected roll-elevon deflection: %.2f deg\n", abs(SizingSweep.Aileron.Checks.Bank.Delta) * 180 / pi);
-fprintf(1, "Selected rudder deflection: %.2f deg\n", abs(SizingSweep.Rudder.Checks.Direction.Delta) * 180 / pi);
-fprintf(1, "All control-surface cases feasible: %d\n", SizingSweep.Converged);
+fprintf(1, "Required pitch authority area fraction: %.3f\n", SizingOpt.Elevator.AreaFraction);
+fprintf(1, "Selected pitch elevon option: %s\n", SizingOpt.Elevator.Name);
+fprintf(1, "Required roll authority area fraction: %.3f\n", SizingOpt.Aileron.AreaFraction);
+fprintf(1, "Physical pitch-only elevon area fraction: %.3f\n", SizingOpt.Elevator.PhysicalAreaFraction);
+fprintf(1, "Physical dual-use elevon area fraction: %.3f\n", SizingOpt.DualElevon.AreaFraction);
+fprintf(1, "Physical roll-only elevon area fraction: %.3f\n", SizingOpt.Aileron.PhysicalAreaFraction);
+fprintf(1, "Required rudder area fraction: %.3f\n", SizingOpt.Rudder.AreaFraction);
+fprintf(1, "Total required control area fraction: %.3f\n", SizingOpt.AreaFraction);
+fprintf(1, "Maximum selected elevator deflection: %.2f deg\n", max(abs([SizingOpt.Elevator.Checks.Trim.Delta; SizingOpt.Elevator.Checks.Pullup.DeltaFinal; SizingOpt.Elevator.Checks.Cruise.Delta])) * 180 / pi);
+fprintf(1, "Selected roll-elevon deflection: %.2f deg\n", abs(SizingOpt.Aileron.Checks.Bank.Delta) * 180 / pi);
+fprintf(1, "Selected rudder deflection: %.2f deg\n", abs(SizingOpt.Rudder.Checks.Direction.Delta) * 180 / pi);
+fprintf(1, "All control-surface cases feasible: %d\n", SizingOpt.Converged);
 fprintf(1, "Pitch authority station range: %.2f to %.2f, max chord %.2f\n", ...
-    SizingSweep.Elevator.YInboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
-    SizingSweep.Elevator.YOutboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
-    SizingSweep.Elevator.ChordFraction);
+    SizingOpt.Elevator.YInboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
+    SizingOpt.Elevator.YOutboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
+    SizingOpt.Elevator.ChordFraction);
 fprintf(1, "Dual-use station range: %.2f to %.2f, chord %.2f\n", ...
-    SizingSweep.DualElevon.YInboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
-    SizingSweep.DualElevon.YOutboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
-    SizingSweep.DualElevon.ChordFraction);
+    SizingOpt.DualElevon.YInboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
+    SizingOpt.DualElevon.YOutboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
+    SizingOpt.DualElevon.ChordFraction);
 fprintf(1, "Roll authority station range: %.2f to %.2f, max chord %.2f\n", ...
-    SizingSweep.Aileron.YInboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
-    SizingSweep.Aileron.YOutboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
-    SizingSweep.Aileron.ChordFraction);
+    SizingOpt.Aileron.YInboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
+    SizingOpt.Aileron.YOutboard / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation, ...
+    SizingOpt.Aileron.ChordFraction);
 
 %% PLOT THE SIZING TRADE %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-DynamicsPkg.PlotSharedElevonAreas(SizingSweep, ChordEta, ChordLength, MaxModelHalfSpanStation, ...
+DynamicsPkg.PlotSharedElevonAreas(SizingOpt, ChordEta, ChordLength, MaxModelHalfSpanStation, ...
+    Aircraft.Specs.Dynamics.Geometry.b / 2, ...
     fullfile(OutputDir, "control_surface_areas.png"));
 
 if ~RunFullReport
@@ -232,9 +238,9 @@ end
 
 % Required pitch deflection for the selected combined pitch-elevon system.
 figure;
-MaxDeflectionDeg = max(abs([SizingSweep.Elevator.Checks.Trim.Delta; ...
-                            SizingSweep.Elevator.Checks.Pullup.DeltaFinal; ...
-                            SizingSweep.Elevator.Checks.Cruise.Delta])) * 180 / pi;
+MaxDeflectionDeg = max(abs([SizingOpt.Elevator.Checks.Trim.Delta; ...
+                            SizingOpt.Elevator.Checks.Pullup.DeltaFinal; ...
+                            SizingOpt.Elevator.Checks.Cruise.Delta])) * 180 / pi;
 DeflectionLimitDeg = Aircraft.Specs.Dynamics.Longitudinal.DeltaMax * 180 / pi;
 bar(categorical("Pitch elevons"), MaxDeflectionDeg)
 hold on
@@ -245,7 +251,7 @@ title("Combined Pitch Elevon Requirement");
 saveas(gcf, fullfile(OutputDir, "elevator_feasibility.png"));
 
 figure;
-MaxDeflectionDeg = abs(SizingSweep.Aileron.Checks.Bank.Delta) * 180 / pi;
+MaxDeflectionDeg = abs(SizingOpt.Aileron.Checks.Bank.Delta) * 180 / pi;
 DeflectionLimitDeg = Cases.TimeToBank.MaxDeflection * 180 / pi;
 bar(categorical("Roll elevon"), MaxDeflectionDeg)
 hold on
@@ -256,18 +262,14 @@ title("Selected Roll Elevon Requirement");
 saveas(gcf, fullfile(OutputDir, "aileron_feasibility.png"));
 
 figure;
-MaxDeflectionDeg = SizingSweep.Rudder.MaxDeflection * 180 / pi;
+MaxDeflectionDeg = SizingOpt.Rudder.MaxDeflection * 180 / pi;
 DeflectionLimitDeg = Cases.DirectionalTrim.MaxDeflection * 180 / pi;
-MaxDeflectionPlot = min(MaxDeflectionDeg, 1.5 * DeflectionLimitDeg);
-contourf(SizingSweep.Rudder.ChordFractions, SizingSweep.Rudder.SpanFractions, MaxDeflectionPlot, 20, "LineColor", "none");
-colorbar
+bar(categorical("Winglet rudder"), MaxDeflectionDeg)
 hold on
-contour(SizingSweep.Rudder.ChordFractions, SizingSweep.Rudder.SpanFractions, MaxDeflectionDeg, ...
-    [DeflectionLimitDeg, DeflectionLimitDeg], "k", "LineWidth", 1.5);
+yline(DeflectionLimitDeg, "--");
 grid on
-xlabel("Rudder chord fraction");
-ylabel("Rudder span fraction");
-title("Required Rudder Deflection [deg]");
+ylabel("Required rudder deflection [deg]");
+title("Selected Rudder Requirement");
 saveas(gcf, fullfile(OutputDir, "rudder_feasibility.png"));
 
 figure;
@@ -279,6 +281,7 @@ end
 hold on
 xline(Cases.LongitudinalTrim.XcgMAC, "--", "Forward CG");
 xline(Cases.TimeToBank.XcgMAC, "--", "Aft CG");
+xlim([Aircraft.Specs.Dynamics.CG.ForwardMAC, Aircraft.Specs.Dynamics.CG.AftMAC]);
 grid on
 xlabel("CG location, x_{cg} / MAC");
 ylabel("Required elevator area fraction, S_e / S");
@@ -293,13 +296,13 @@ saveas(gcf, fullfile(OutputDir, "elevator_area_vs_cg.png"));
 CaseLabels = categorical(["Trim"; "Pull-up"; "Cruise"]);
 CaseLabels = reordercats(CaseLabels, ["Trim"; "Pull-up"; "Cruise"]);
 
-DeltaDeg = abs([SizingSweep.Elevator.Checks.Trim.Delta; ...
-                SizingSweep.Elevator.Checks.Pullup.DeltaFinal; ...
-                SizingSweep.Elevator.Checks.Cruise.Delta]) * 180 / pi;
+DeltaDeg = abs([SizingOpt.Elevator.Checks.Trim.Delta; ...
+                SizingOpt.Elevator.Checks.Pullup.DeltaFinal; ...
+                SizingOpt.Elevator.Checks.Cruise.Delta]) * 180 / pi;
 
-AlphaDeg = abs([SizingSweep.Elevator.Checks.Trim.Alpha; ...
-                SizingSweep.Elevator.Checks.Pullup.AlphaFinal; ...
-                SizingSweep.Elevator.Checks.Cruise.Alpha]) * 180 / pi;
+AlphaDeg = abs([SizingOpt.Elevator.Checks.Trim.Alpha; ...
+                SizingOpt.Elevator.Checks.Pullup.AlphaFinal; ...
+                SizingOpt.Elevator.Checks.Cruise.Alpha]) * 180 / pi;
 
 figure;
 subplot(2, 2, 1)
@@ -319,7 +322,7 @@ ylabel("|alpha| [deg]");
 title("Angle of Attack")
 
 subplot(2, 2, 3)
-bar(categorical("Time to bank"), abs(SizingSweep.Aileron.Checks.Bank.Phi) * 180 / pi)
+bar(categorical("Time to bank"), abs(SizingOpt.Aileron.Checks.Bank.Phi) * 180 / pi)
 hold on
 yline(Cases.TimeToBank.BankTarget * 180 / pi, "--");
 grid on
@@ -327,7 +330,7 @@ ylabel("Bank angle in 7 s [deg]");
 title("Roll Authority")
 
 subplot(2, 2, 4)
-bar(categorical("Rotation"), SizingSweep.Elevator.Checks.Rotation.VR)
+bar(categorical("Rotation"), SizingOpt.Elevator.Checks.Rotation.VR)
 hold on
 yline(Cases.TakeoffRotation.V2min - Cases.TakeoffRotation.Margin, "--");
 grid on

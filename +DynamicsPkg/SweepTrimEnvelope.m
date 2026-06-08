@@ -2,15 +2,15 @@ function [TrimCase] = SweepTrimEnvelope(Aircraft)
 %
 % [TrimCase] = SweepTrimEnvelope(Aircraft)
 %
-% Build named trim cases from simple flight-mechanics constraints. This
-% gives SizeElevon a repeatable envelope without requiring a mission table.
+% Build named trim cases from simple flight-mechanics constraints without
+% requiring a mission table.
 %
 % INPUTS:
 %     Aircraft - FAST aircraft structure.
 %                size/type/units: 1-by-1 / struct / []
 %
 % OUTPUTS:
-%     TrimCase - structure that can be passed into SizeElevon.
+%     TrimCase - structure that can be passed into TrimLongitudinal.
 %                size/type/units: 1-by-1 / struct / []
 %
 

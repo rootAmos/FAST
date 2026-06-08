@@ -9,7 +9,7 @@ function [Aircraft] = ControlSurfacePenalty(Aircraft, Sizing)
 %     Aircraft - FAST aircraft structure.
 %                size/type/units: 1-by-1 / struct / []
 %
-%     Sizing   - output from DynamicsPkg.SizeElevon or SizeControlSurfaces.
+%     Sizing   - output from DynamicsPkg.OptimizeSharedElevons or SizeControlSurfaces.
 %                size/type/units: 1-by-1 / struct / []
 %
 % OUTPUTS:
