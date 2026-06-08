@@ -38,6 +38,7 @@ VR = sqrt(Case.Mass * g * (Case.XcgMAC - Gear.XmlgMAC) / (-Rho * Sref * CmMLG));
 Check.Name = Case.Name;
 Check.VR = VR;
 Check.CmMLG = CmMLG;
-Check.Feasible = VR < (Case.V2min - Case.Margin);
+Tolerance = DynamicsPkg.ControlFeasibilityTolerance(Case);
+Check.Feasible = VR <= (Case.V2min - Case.Margin) + Tolerance;
 
 end

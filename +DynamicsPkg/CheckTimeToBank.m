@@ -34,7 +34,8 @@ Phi = abs(BankPerDeflection) * Case.MaxDeflection;
 Check.Name = Case.Name;
 Check.Delta = DeltaA;
 Check.Phi = Phi;
-Check.Feasible = abs(Check.Delta) <= Case.MaxDeflection;
+Tolerance = DynamicsPkg.ControlFeasibilityTolerance(Case);
+Check.Feasible = abs(Check.Delta) <= Case.MaxDeflection + Tolerance;
 Check.Clda = Clda;
 
 if isfield(Aileron, 'YInboard')

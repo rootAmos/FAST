@@ -34,7 +34,8 @@ Check.DeltaAlpha = x(1);
 Check.DeltaElevator = x(2);
 Check.AlphaFinal = Trim.AlphaTrim + Check.DeltaAlpha;
 Check.DeltaFinal = Trim.DeltaTrim + Check.DeltaElevator;
-Check.Feasible = abs(Check.DeltaFinal) <= Case.MaxDeflection && ...
-                 abs(Check.AlphaFinal) <= Case.AlphaMax;
+Tolerance = DynamicsPkg.ControlFeasibilityTolerance(Case);
+Check.Feasible = abs(Check.DeltaFinal) <= Case.MaxDeflection + Tolerance && ...
+                 abs(Check.AlphaFinal) <= Case.AlphaMax + Tolerance;
 
 end

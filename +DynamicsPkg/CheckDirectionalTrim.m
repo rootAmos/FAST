@@ -13,6 +13,7 @@ Delta = -Case.RequiredCn / Cndr;
 Check.Name = Case.Name;
 Check.RequiredCn = Case.RequiredCn;
 Check.Delta = Delta;
-Check.Feasible = abs(Check.Delta) <= Case.MaxDeflection;
+Tolerance = DynamicsPkg.ControlFeasibilityTolerance(Case);
+Check.Feasible = abs(Check.Delta) <= Case.MaxDeflection + Tolerance;
 
 end

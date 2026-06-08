@@ -27,14 +27,14 @@ else
     OutboardStationOut = max(Surfaces.OutboardEtaStations) * MaxStation;
 end
 
-PitchPanels = BuildStationPanels(PitchStationIn, PitchStationOut, PanelWidth);
-OutboardPanels = BuildStationPanels(OutboardStationIn, OutboardStationOut, PanelWidth);
+PitchPanels = DynamicsPkg.BuildStationPanels(PitchStationIn, PitchStationOut, PanelWidth);
+OutboardPanels = DynamicsPkg.BuildStationPanels(OutboardStationIn, OutboardStationOut, PanelWidth);
 
-PitchCoeff = PanelAreaCoefficients(Aircraft, Surfaces.Elevator, PitchPanels, MaxStation);
-OutboardCoeff = PanelAreaCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
-RollCoeff = PanelRollCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
-[PitchClCoeff, PitchCmCoeff] = PanelPitchCoefficients(Aircraft, Surfaces.Elevator, PitchPanels, MaxStation);
-[DualClCoeff, DualCmCoeff] = PanelPitchCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
+PitchCoeff = DynamicsPkg.PanelAreaCoefficients(Aircraft, Surfaces.Elevator, PitchPanels, MaxStation);
+OutboardCoeff = DynamicsPkg.PanelAreaCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
+RollCoeff = DynamicsPkg.PanelRollCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
+[PitchClCoeff, PitchCmCoeff] = DynamicsPkg.PanelPitchCoefficients(Aircraft, Surfaces.Elevator, PitchPanels, MaxStation);
+[DualClCoeff, DualCmCoeff] = DynamicsPkg.PanelPitchCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
 
 PitchMax = max(Surfaces.Elevator.ChordFractions);
 DualMax = max(Surfaces.DualElevon.ChordFractions);
@@ -52,7 +52,7 @@ RollOnlySegments = BuildSegmentsFromPanels(Aircraft, Surfaces.Aileron, OutboardP
 Elevator = CombineSegments(Surfaces.Elevator, [PitchOnlySegments; DualSegments], "Pitch Elevon");
 Aileron = CombineSegments(Surfaces.Aileron, [DualSegments; RollOnlySegments], "Roll Elevon");
 DualElevon = CombineSegments(Surfaces.DualElevon, DualSegments, "Dual-Use Elevon");
-Rudder = SizeRudder(Aircraft, Cases.DirectionalTrim, Surfaces.Rudder);
+Rudder = DynamicsPkg.SizeRudder(Aircraft, Cases.DirectionalTrim, Surfaces.Rudder);
 
 Elevator.Checks = CheckElevator(Aircraft, Cases, Elevator);
 Aileron.Checks = CheckAileron(Aircraft, Cases, Aileron);
@@ -139,34 +139,6 @@ Values = PanelValues(PitchChordValue, DualChordValue, RollChordValue, PitchCoeff
 
 end
 
-function [CLCoeff, CmCoeff] = PanelPitchCoefficients(Aircraft, Surface, Panels, MaxStation)
-% Per-unit-chord pitch derivatives from local trailing-edge moment arms.
-
-Aero = Aircraft.Specs.Dynamics.Longitudinal;
-Geom = Aircraft.Specs.Dynamics.Geometry;
-Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
-HalfSpan = Geom.b / 2;
-
-CenterLeadingEdgeX = interp1(Surface.ChordEta, Surface.ChordLeadingEdgeX, 0, "linear", "extrap");
-Xref = CenterLeadingEdgeX + Aero.XrefMAC * Geom.cbar;
-
-Y = PanelYStations(Panels, MaxStation, HalfSpan);
-Eta = Y / HalfSpan;
-LocalChord = interp1(Surface.ChordEta, Surface.ChordLength, Eta, "linear", "extrap");
-LocalTrailingEdgeX = interp1(Surface.ChordEta, Surface.ChordTrailingEdgeX, Eta, "linear", "extrap");
-ControlCenterX = LocalTrailingEdgeX - 0.5 * LocalChord;
-if isfield(Surface, 'SectionClDelta')
-    SectionClDelta = Surface.SectionClDelta;
-else
-    SectionClDelta = Aero.CLdelta;
-end
-SectionLift = SectionClDelta * Surface.EtaControl * LocalChord;
-
-CLCoeff = 2 * TrapzRows(Y, SectionLift) / Sref;
-CmCoeff = -2 * TrapzRows(Y, SectionLift .* (ControlCenterX - Xref)) / (Sref * Geom.cbar);
-
-end
-
 function [Values] = PanelValues(PitchChord, DualChord, RollChord, PitchCoeff, OutboardCoeff, ...
     RollCoeff, PitchClCoeff, DualClCoeff, PitchCmCoeff, DualCmCoeff)
 % Report optimized panel aggregate values.
@@ -177,58 +149,6 @@ Values.PitchCmdelta = PitchCmCoeff' * PitchChord + DualCmCoeff' * DualChord;
 Values.RollArea = OutboardCoeff' * (DualChord + RollChord);
 Values.RollIntegral = RollCoeff' * (DualChord + RollChord);
 Values.PhysicalArea = PitchCoeff' * PitchChord + OutboardCoeff' * DualChord + OutboardCoeff' * RollChord;
-
-end
-
-function [Panels] = BuildStationPanels(StationIn, StationOut, PanelWidth)
-% Build short station panels and preserve the exact requested outer edge.
-
-Edges = StationIn:PanelWidth:StationOut;
-if Edges(end) < StationOut
-    Edges = [Edges, StationOut];
-end
-
-Panels.Inboard = Edges(1:end - 1)';
-Panels.Outboard = Edges(2:end)';
-Panels.Center = 0.5 * (Panels.Inboard + Panels.Outboard);
-
-end
-
-function [Coeff] = PanelAreaCoefficients(Aircraft, Surface, Panels, MaxStation)
-% Area per unit chord fraction for each panel.
-
-Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
-HalfSpan = Aircraft.Specs.Dynamics.Geometry.b / 2;
-Y = PanelYStations(Panels, MaxStation, HalfSpan);
-LocalChord = interp1(Surface.ChordEta, Surface.ChordLength, Y / HalfSpan, "linear", "extrap");
-Coeff = 2 * TrapzRows(Y, LocalChord) / Sref;
-
-end
-
-function [Coeff] = PanelRollCoefficients(Aircraft, Surface, Panels, MaxStation)
-% Roll integral per unit chord fraction for each panel.
-
-HalfSpan = Aircraft.Specs.Dynamics.Geometry.b / 2;
-Y = PanelYStations(Panels, MaxStation, HalfSpan);
-LocalChord = interp1(Surface.ChordEta, Surface.ChordLength, Y / HalfSpan, "linear", "extrap");
-Coeff = Surface.SectionClDelta * TrapzRows(Y, LocalChord .* Y);
-
-end
-
-function [Y] = PanelYStations(Panels, MaxStation, HalfSpan)
-% Shared quadrature stations for all spanwise panels.
-
-PanelFraction = linspace(0, 1, 25);
-Station = Panels.Inboard + (Panels.Outboard - Panels.Inboard) .* PanelFraction;
-Y = Station / MaxStation * HalfSpan;
-
-end
-
-function [Integral] = TrapzRows(X, Y)
-% Row-wise trapezoid integration for panel-specific station grids.
-
-Integral = sum(0.5 * (X(:, 2:end) - X(:, 1:end - 1)) .* ...
-    (Y(:, 1:end - 1) + Y(:, 2:end)), 2);
 
 end
 
@@ -321,8 +241,8 @@ function [Segments] = BuildSegmentsFromPanels(Aircraft, Surface, Panels, ChordFr
 
 HalfSpan = Aircraft.Specs.Dynamics.Geometry.b / 2;
 Segments = {};
-AreaCoeff = PanelAreaCoefficients(Aircraft, Surface, Panels, MaxStation);
-[CLCoeff, CmCoeff] = PanelPitchCoefficients(Aircraft, Surface, Panels, MaxStation);
+AreaCoeff = DynamicsPkg.PanelAreaCoefficients(Aircraft, Surface, Panels, MaxStation);
+[CLCoeff, CmCoeff] = DynamicsPkg.PanelPitchCoefficients(Aircraft, Surface, Panels, MaxStation);
 
 for ipanel = 1:length(ChordFractions)
     if ChordFractions(ipanel) <= 1.0e-4
@@ -361,38 +281,6 @@ Trial.AreaFraction = sum(cellfun(@(Segment) Segment.AreaFraction, Segments));
 Trial.CLdeltaEffective = sum(cellfun(@(Segment) Segment.CLdeltaEffective, Segments));
 Trial.CmdeltaEffective = sum(cellfun(@(Segment) Segment.CmdeltaEffective, Segments));
 Trial.EtaControl = Surface.EtaControl;
-
-end
-
-function [Rudder] = SizeRudder(Aircraft, Case, Surface)
-% Size the separate winglet rudder directly from directional authority.
-
-Lat = Aircraft.Specs.Dynamics.Lateral;
-RequiredArea = abs(Case.RequiredCn / (Lat.Cndr * Surface.EtaControl * Case.MaxDeflection));
-[SpanGrid, ChordGrid] = ndgrid(Surface.SpanFractions(:), Surface.ChordFractions(:));
-AreaGrid = SpanGrid .* ChordGrid;
-Feasible = AreaGrid >= RequiredArea;
-
-if any(Feasible(:))
-    CandidateArea = AreaGrid;
-    CandidateArea(~Feasible) = Inf;
-    [~, Index] = min(CandidateArea(:));
-    Converged = true;
-else
-    [~, Index] = max(AreaGrid(:));
-    Converged = false;
-end
-
-Rudder = Surface;
-Rudder.SpanFraction = SpanGrid(Index);
-Rudder.ChordFraction = ChordGrid(Index);
-Rudder.AreaFraction = AreaGrid(Index);
-Rudder.EtaControl = Surface.EtaControl;
-Rudder.Converged = Converged;
-Rudder.SpanFractions = Surface.SpanFractions(:);
-Rudder.ChordFractions = Surface.ChordFractions(:);
-Rudder.AreaFractions = AreaGrid;
-Rudder.Feasible = Feasible;
 
 end
 
