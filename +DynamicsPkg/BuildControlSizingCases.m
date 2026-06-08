@@ -2,7 +2,7 @@ function [Cases] = BuildControlSizingCases(Aircraft)
 %
 % [Cases] = BuildControlSizingCases(Aircraft)
 %
-% Build paper-style control sizing cases for an elevon sizing sweep.
+% Build paper-style control sizing cases for separate surface sizing.
 %
 
 g = 9.81;
@@ -10,10 +10,6 @@ Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
 AltCrs = Aircraft.Specs.Performance.Alts.Crs;
 MTOW = Aircraft.Specs.Weight.MTOW;
 MLW = Aircraft.Specs.Weight.MLW;
-
-if isnan(MLW) || (MLW <= 0)
-    MLW = 0.86 * MTOW;
-end
 
 Aero = Aircraft.Specs.Dynamics.Longitudinal;
 
@@ -52,14 +48,23 @@ Cases.TimeToBank.TimeLimit = 7;
 Cases.TimeToBank.MaxDeflection = Aero.DeltaMax;
 
 Cases.TakeoffRotation.Name = "Takeoff rotation";
-Cases.TakeoffRotation.Rationale = "Forward CG, MTOW, max nose-up elevon.";
+Cases.TakeoffRotation.Rationale = "Forward CG, MTOW, max nose-up elevator.";
 Cases.TakeoffRotation.Alt = 0;
 Cases.TakeoffRotation.Mass = MTOW;
 Cases.TakeoffRotation.XcgMAC = Aircraft.Specs.Dynamics.CG.ForwardMAC;
-Cases.TakeoffRotation.AlphaGround = deg2rad(-3.92);
-Cases.TakeoffRotation.DeltaElevon = -Aero.DeltaMax;
+if isfield(Aircraft.Specs.Dynamics.Gear, 'AlphaGround')
+    Cases.TakeoffRotation.AlphaGround = Aircraft.Specs.Dynamics.Gear.AlphaGround;
+else
+    Cases.TakeoffRotation.AlphaGround = 0;
+end
+Cases.TakeoffRotation.DeltaElevator = -Aero.DeltaMax;
 Cases.TakeoffRotation.V2min = V2min;
 Cases.TakeoffRotation.Margin = 5;
+
+Cases.DirectionalTrim.Name = "Directional trim";
+Cases.DirectionalTrim.Rationale = "Rudder authority against required yawing moment.";
+Cases.DirectionalTrim.RequiredCn = 0.015;
+Cases.DirectionalTrim.MaxDeflection = Aero.DeltaMax;
 
 Cases.CruiseTrim.Name = "Cruise trim";
 Cases.CruiseTrim.Rationale = "Nominal cruise trim and drag check.";
@@ -73,4 +78,3 @@ Cases.CruiseTrim.MaxDeflection = Aero.DeltaMax;
 Cases.CruiseTrim.AlphaMax = Aero.AlphaMax;
 
 end
-

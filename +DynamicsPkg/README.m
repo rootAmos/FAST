@@ -3,9 +3,9 @@ function [] = README()
 % Dynamics Package (+DynamicsPkg)
 %
 % This package contains early conceptual flight-dynamics checks that can be
-% run around FAST's aircraft sizing loop. The first implemented use case is
-% longitudinal trim and elevon sizing for BWB-style aircraft, where the
-% wing sizing, trim drag, and control-surface authority are coupled.
+% run around FAST's aircraft sizing loop. The main BWB workflow sizes
+% elevator, aileron, and rudder surfaces separately, where the wing sizing,
+% trim drag, and control-surface authority are coupled.
 %
 % The trim equations are from:
 %
@@ -31,18 +31,32 @@ function [] = README()
 %     Sizing = DynamicsPkg.SizeElevon(Aircraft, TrimCase);
 %     Aircraft = DynamicsPkg.ControlSurfacePenalty(Aircraft, Sizing);
 %
-% Paper-style grouped elevon sizing workflow:
+% Paper-style separated control-surface sizing workflow:
 %
 %     Cases = DynamicsPkg.BuildControlSizingCases(Aircraft);
-%     Elevon.EtaControl = 0.85;
-%     Elevon.ChordFractions = linspace(0.10, 0.35, 26)';
-%     Elevon.SpanFractions = linspace(0.05, 1.00, 192)';
-%     Sizing = DynamicsPkg.SizeElevons(Aircraft, Cases, Elevon);
-%     SizingOpt = DynamicsPkg.OptimizeElevonsCasadi(Aircraft, Cases, Elevon);
+%     Surfaces.Elevator.EtaControl = 0.85;
+%     Surfaces.Elevator.ChordFractions = linspace(0.10, 0.35, 26)';
+%     Surfaces.Elevator.SpanFractions = linspace(0.05, 0.60, 112)';
+%     Surfaces.Aileron.EtaControl = 0.85;
+%     Surfaces.Aileron.ChordFractions = linspace(0.08, 0.30, 20)';
+%     Surfaces.Aileron.SpanFractions = linspace(0.05, 1.00, 20)';
+%     Surfaces.Aileron.YInboardMin = 0.65 * Aircraft.Specs.Dynamics.Geometry.b / 2;
+%     Surfaces.Aileron.YOutboard = 0.94 * Aircraft.Specs.Dynamics.Geometry.b / 2;
+%     Surfaces.Aileron.ReferenceChord = ...
+%         (Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS) / Aircraft.Specs.Dynamics.Geometry.b;
+%     Surfaces.Aileron.SectionClDelta = 2.5;
+%     Surfaces.Rudder.EtaControl = 0.85;
+%     Surfaces.Rudder.ChordFractions = linspace(0.10, 0.35, 20)';
+%     Surfaces.Rudder.SpanFractions = linspace(0.05, 0.80, 152)';
+%     Sizing = DynamicsPkg.OptimizeSharedElevons(Aircraft, Cases, Surfaces);
 %
 % A standalone demo is available with:
 %
 %     [Sizing, TrimCase, CgSweep] = DynamicsPkg.BWB_Dynamics_Demo();
+%
+% By default, the demo runs the shared-elevon optimizer and regenerates the
+% control-surface area plot only. Use BWB_Dynamics_Demo(true) for the full
+% report plots, or BWB_Dynamics_Demo(true, true) to also run the CG sweep.
 %
 % The trim solver does not infer stability derivatives. Provide them in
 % Aircraft.Specs.Dynamics.Longitudinal.
@@ -51,8 +65,8 @@ function [] = README()
 % moments to the CG. The shift is applied to Cm0, Cmalpha, and Cmdelta
 % before Eq. 2.47-2.51 are evaluated.
 %
-% Elevon area is approximated as span fraction times chord fraction. The
-% trim derivatives use EtaControl * AreaFraction directly.
+% Control-surface area is approximated as span fraction times chord
+% fraction. The trim derivatives use EtaControl * AreaFraction directly.
 %
 % Trim drag is modeled as:
 %
@@ -62,7 +76,8 @@ function [] = README()
 % expose control-authority feasibility during conceptual sizing, not replace
 % a nonlinear 6DOF simulation or high-fidelity aero database.
 %
-% OptimizeElevonsCasadi uses CasADi/IPOPT for a continuous version of the
-% same elevon sizing problem. It requires the CasADi MATLAB folder on path.
+% OptimizeSharedElevons is the current BWB sizing entry point for a
+% pitch-only inboard section, a dual-use outboard section, a roll-only
+% outboard section, and a separately sized winglet rudder.
 %
 end

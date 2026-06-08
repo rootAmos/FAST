@@ -1,6 +1,6 @@
-function [Check] = CheckLongitudinalTrim(Aircraft, Case, Elevon)
+function [Check] = CheckLongitudinalTrim(Aircraft, Case, Elevator)
 %
-% [Check] = CheckLongitudinalTrim(Aircraft, Case, Elevon)
+% [Check] = CheckLongitudinalTrim(Aircraft, Case, Elevator)
 %
 % Check level-flight trim using the paper's Eq. 3.1-3.5.
 %
@@ -12,7 +12,7 @@ TrimCase.Mass = Case.Mass;
 TrimCase.Nz = Case.Nz;
 TrimCase.XcgMAC = Case.XcgMAC;
 TrimCase.MaxDeflection = Case.MaxDeflection;
-TrimCase.Elevon = Elevon;
+TrimCase.Elevon = Elevator;
 
 Trim = DynamicsPkg.TrimLongitudinal(Aircraft, TrimCase);
 
@@ -24,4 +24,3 @@ Check.Feasible = all(abs(Check.Delta) <= Case.MaxDeflection) && ...
                  all(abs(Check.Alpha) <= Case.AlphaMax);
 
 end
-
