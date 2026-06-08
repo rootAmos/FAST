@@ -239,42 +239,6 @@ if ~RunFullReport
     return
 end
 
-% Required pitch deflection for the selected combined pitch-elevon system.
-figure;
-MaxDeflectionDeg = max(abs([SizingOpt.Elevator.Checks.Trim.Delta; ...
-                            SizingOpt.Elevator.Checks.Pullup.DeltaFinal; ...
-                            SizingOpt.Elevator.Checks.Cruise.Delta])) * 180 / pi;
-DeflectionLimitDeg = Aircraft.Specs.Dynamics.Longitudinal.DeltaMax * 180 / pi;
-bar(categorical("Pitch elevons"), MaxDeflectionDeg)
-hold on
-yline(DeflectionLimitDeg, "--");
-grid on
-ylabel("Required pitch deflection [deg]");
-title("Combined Pitch Elevon Requirement");
-saveas(gcf, fullfile(OutputDir, "elevator_feasibility.png"));
-
-figure;
-MaxDeflectionDeg = abs(SizingOpt.Aileron.Checks.Bank.Delta) * 180 / pi;
-DeflectionLimitDeg = Cases.TimeToBank.MaxDeflection * 180 / pi;
-bar(categorical("Roll elevon"), MaxDeflectionDeg)
-hold on
-yline(DeflectionLimitDeg, "--");
-grid on
-ylabel("Required roll deflection [deg]");
-title("Selected Roll Elevon Requirement");
-saveas(gcf, fullfile(OutputDir, "aileron_feasibility.png"));
-
-figure;
-MaxDeflectionDeg = SizingOpt.Rudder.MaxDeflection * 180 / pi;
-DeflectionLimitDeg = Cases.DirectionalTrim.MaxDeflection * 180 / pi;
-bar(categorical("Winglet rudder"), MaxDeflectionDeg)
-hold on
-yline(DeflectionLimitDeg, "--");
-grid on
-ylabel("Required rudder deflection [deg]");
-title("Selected Rudder Requirement");
-saveas(gcf, fullfile(OutputDir, "rudder_feasibility.png"));
-
 figure;
 if RunCgSweep
     plot(CgSweep.XcgMAC, CgSweep.AreaFraction, "LineWidth", 1.5);

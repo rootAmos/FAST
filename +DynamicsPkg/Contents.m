@@ -19,7 +19,6 @@
 % PanelCoefficients   - DynamicsPkg.PanelCoefficients is a function.
 % PlotSharedElevonAreas - DynamicsPkg.PlotSharedElevonAreas is a function.
 % SizeRudder           - DynamicsPkg.SizeRudder is a function.
-% SizeControlSurfaces  - DynamicsPkg.SizeControlSurfaces is a function.
 % SetupCasadi          - DynamicsPkg.SetupCasadi is a function.
 % SolveSharedElevonChords - DynamicsPkg.SolveSharedElevonChords is a function.
 % ControlSurfacePenalty - DynamicsPkg.ControlSurfacePenalty is a function.
