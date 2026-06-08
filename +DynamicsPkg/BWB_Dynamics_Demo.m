@@ -282,11 +282,18 @@ else
     plot(CgSweep.XcgMAC, CgSweep.AreaFraction, "o", "MarkerSize", 8, "LineWidth", 1.5);
 end
 hold on
-xline(Cases.LongitudinalTrim.XcgMAC, "--", "Forward CG");
-xline(Cases.TimeToBank.XcgMAC, "--", "Aft CG");
 xlim([Aircraft.Specs.Dynamics.CG.ForwardMAC, Aircraft.Specs.Dynamics.CG.AftMAC]);
 AreaLimit = max(0.06, 1.2 * max(CgSweep.AreaFraction));
 ylim([0, AreaLimit]);
+ForwardCG = Aircraft.Specs.Dynamics.CG.ForwardMAC;
+AftCG = Aircraft.Specs.Dynamics.CG.AftMAC;
+xline(ForwardCG, "--");
+xline(AftCG, "--");
+LabelInset = 0.005 * (AftCG - ForwardCG);
+text(ForwardCG + LabelInset, 0.08 * AreaLimit, "Forward CG limit", ...
+    "HorizontalAlignment", "left", "VerticalAlignment", "bottom");
+text(AftCG - LabelInset, 0.08 * AreaLimit, "Aft CG limit", ...
+    "HorizontalAlignment", "right", "VerticalAlignment", "bottom");
 grid on
 xlabel("CG location, x_{cg} / MAC");
 ylabel("Required elevon area fraction, S_e / S");
