@@ -41,9 +41,10 @@ patch([RudderIn, RudderOut, RudderOut, RudderIn], ...
     [0, 0, Sizing.Rudder.ChordFraction, Sizing.Rudder.ChordFraction], ...
     [0.55, 0.25, 0.70], "FaceAlpha", 0.85, "EdgeColor", [0.05, 0.12, 0.18], "LineWidth", 1.2);
 
-DrawChordLimit(PitchOnlySegments, FtPerM, max(Sizing.Elevator.ChordFractions), "Pitch max", 0.025);
-DrawChordLimit(DualSegments, FtPerM, max(Sizing.DualElevon.ChordFractions), "Dual-use max", 0.055);
-DrawChordLimitSpan(RudderIn, RudderOut, max(Sizing.Rudder.ChordFractions), "Rudder max", 0.025);
+LimitLabel = sprintf("Max Chord Limit\navailable");
+DrawChordLimit(PitchOnlySegments, FtPerM, max(Sizing.Elevator.ChordFractions), LimitLabel, 0.025);
+DrawChordLimit(DualSegments, FtPerM, max(Sizing.DualElevon.ChordFractions), LimitLabel, 0.055);
+DrawChordLimitSpan(RudderIn, RudderOut, max(Sizing.Rudder.ChordFractions), LimitLabel, 0.025);
 
 PitchLabel = SegmentLabelPoint(PitchOnlySegments, FtPerM, 0);
 DualLabel = SegmentLabelPoint(DualSegments, FtPerM, 0);
@@ -124,7 +125,8 @@ function DrawChordLimitSpan(StationIn, StationOut, ChordLimit, Label, LabelOffse
 
 plot([StationIn, StationOut], [ChordLimit, ChordLimit], "r--", "LineWidth", 1.6);
 text(0.5 * (StationIn + StationOut), ChordLimit + LabelOffset, Label, ...
-    "HorizontalAlignment", "center", "Color", [0.75, 0.05, 0.05], "FontWeight", "bold");
+    "HorizontalAlignment", "center", "Color", [0.75, 0.05, 0.05], ...
+    "FontSize", 10, "FontWeight", "bold");
 
 end
 
