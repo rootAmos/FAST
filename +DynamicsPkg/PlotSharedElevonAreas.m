@@ -36,19 +36,19 @@ area(AvailableHalfSpan, AvailableChordFraction, ...
     "FaceColor", [0.82, 0.86, 0.90], "FaceAlpha", 0.35, "EdgeColor", [0.45, 0.48, 0.52], "LineWidth", 1.0);
 
 DrawSegmentBand(PitchOnlySegments, [0.20, 0.45, 0.85], FtPerM, 0, MaxPanelSpanFt, 0.85);
-DrawSegmentBand(DualSegments, [0.20, 0.70, 0.55], FtPerM, 0, MaxPanelSpanFt, 0.60);
+DrawSegmentBand(DualSegments, [0.20, 0.70, 0.55], FtPerM, 0, MaxPanelSpanFt, 0.70);
 
-% Overlay roll-only panels on the same chord-fraction axis. The optimizer
-% still enforces DualChord + RollChord <= max chord; this plot shows role
-% overlap/usage, not physically stacked chord.
-DrawSegmentBand(RollOnlySegments, [0.95, 0.62, 0.05], FtPerM, 0, MaxPanelSpanFt, 0.45);
+% Draw roll-only material above the dual-use material inside the same
+% outboard chord budget. The optimizer enforces DualChord + RollChord <= max
+% chord; the vertical split is the physical chord allocation within that cap.
+DrawSegmentBand(RollOnlySegments, [0.95, 0.62, 0.05], FtPerM, MaxSegmentChord(DualSegments), MaxPanelSpanFt, 0.70);
 patch([RudderIn, RudderOut, RudderOut, RudderIn], ...
     [0, 0, Sizing.Rudder.ChordFraction, Sizing.Rudder.ChordFraction], ...
     [0.55, 0.25, 0.70], "FaceAlpha", 0.85, "EdgeColor", [0.05, 0.12, 0.18], "LineWidth", 1.2);
 
 PitchLabel = SegmentLabelPoint(PitchOnlySegments, FtPerM, 0);
 DualLabel = SegmentLabelPoint(DualSegments, FtPerM, 0);
-RollLabel = SegmentLabelPoint(RollOnlySegments, FtPerM, 0);
+RollLabel = SegmentLabelPoint(RollOnlySegments, FtPerM, MaxSegmentChord(DualSegments));
 
 if ~isempty(PitchLabel)
     text(PitchLabel(1), PitchLabel(2) + 0.015, ...

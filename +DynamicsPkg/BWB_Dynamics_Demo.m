@@ -160,7 +160,7 @@ Surfaces.SharedTrailingEdge = 1; % dual-use and roll-only panels share outboard 
 
 Surfaces.Elevator = Planform;
 Surfaces.Elevator.Name = "Pitch Elevon";
-Surfaces.Elevator.ChordFractions = 0.25; % [-] max local chord fraction inside 10 ft; CasADi chooses actual panel fractions.
+Surfaces.Elevator.ChordFractions = 0.20; % [-] max local chord fraction inside 10 ft; CasADi chooses actual panel fractions.
 Surfaces.Elevator.SectionClDelta = 3.0;  % [1/rad] local 2D dcl/d(delta_elevon), where delta_elevon is panel deflection.
 
 Surfaces.DualElevon = Planform;
