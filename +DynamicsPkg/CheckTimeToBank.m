@@ -14,19 +14,30 @@ Inertia = Aircraft.Specs.Dynamics.Inertia;
 
 Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
 qbar = 0.5 * Rho * V ^ 2;
-Clda = Lat.Clda * Aileron.TauControlEff * Aileron.AreaFraction;
-if isfield(Aileron, 'Segments')
-    CldaIntegral = 0;
-    for isegment = 1:length(Aileron.Segments)
-        CldaIntegral = CldaIntegral + ControlRollIntegral(Aircraft, Aileron.Segments{isegment});
-    end
-    Clda = 2 * Aileron.TauControlEff * CldaIntegral / (Sref * Geom.b);
-elseif isfield(Aileron, 'YInboard') && isfield(Aileron, 'YOutboard')
-    Clda = 2 * Aileron.TauControlEff * ControlRollIntegral(Aircraft, Aileron) / (Sref * Geom.b);
+if isfield(Lat, 'CrlDeltaA')
+    CrlDeltaA = Lat.CrlDeltaA * Aileron.TauControlEff * Aileron.AreaFraction;
+elseif isfield(Lat, 'CrollDeltaA')
+    CrlDeltaA = Lat.CrollDeltaA * Aileron.TauControlEff * Aileron.AreaFraction;
+else
+    CrlDeltaA = Lat.Clda * Aileron.TauControlEff * Aileron.AreaFraction;
 end
-Lp = qbar * Sref * Geom.b ^ 2 * Lat.Clp / (2 * V * Inertia.Ixx);
+if isfield(Aileron, 'Segments')
+    CrollIntegral = 0;
+    for isegment = 1:length(Aileron.Segments)
+        CrollIntegral = CrollIntegral + ControlRollIntegral(Aircraft, Aileron.Segments{isegment});
+    end
+    CrlDeltaA = 2 * Aileron.TauControlEff * CrollIntegral / (Sref * Geom.b);
+elseif isfield(Aileron, 'YInboard') && isfield(Aileron, 'YOutboard')
+    CrlDeltaA = 2 * Aileron.TauControlEff * ControlRollIntegral(Aircraft, Aileron) / (Sref * Geom.b);
+end
+if isfield(Lat, 'Crlp')
+    Crlp = Lat.Crlp;
+else
+    Crlp = Lat.Clp;
+end
+Lp = qbar * Sref * Geom.b ^ 2 * Crlp / (2 * V * Inertia.Ixx);
 
-BankPerDeflection = (2 * V / Geom.b) * (Clda / Lat.Clp) * ...
+BankPerDeflection = (2 * V / Geom.b) * (CrlDeltaA / Crlp) * ...
     (Case.TimeLimit + (1 / Lp) * (1 - exp(Lp * Case.TimeLimit)));
 DeltaA = Case.BankTarget / abs(BankPerDeflection);
 Phi = abs(BankPerDeflection) * Case.MaxDeflection;
@@ -36,7 +47,7 @@ Check.Delta = DeltaA;
 Check.Phi = Phi;
 Tolerance = DynamicsPkg.ControlFeasibilityTolerance(Case);
 Check.Feasible = abs(Check.Delta) <= Case.MaxDeflection + Tolerance;
-Check.Clda = Clda;
+Check.CrlDeltaA = CrlDeltaA;
 
 if isfield(Aileron, 'YInboard')
     Check.YInboard = Aileron.YInboard;
@@ -54,7 +65,7 @@ Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
     if isfield(Surface, 'SectionClDelta')
         SectionClDelta = Surface.SectionClDelta;
     else
-        SectionClDelta = 2.5;
+        SectionClDelta = 3.0;
     end
 
     y = linspace(Surface.YInboard, Surface.YOutboard, 25);

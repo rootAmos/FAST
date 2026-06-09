@@ -72,9 +72,10 @@ Aircraft.Specs.Dynamics.Longitudinal.XrefMAC = 0.25;
 %% LATERAL AND GEOMETRY INPUTS %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% Placeholder aircraft roll derivatives for the time-to-bank check.
-Aircraft.Specs.Dynamics.Lateral.Clda = 0.08; % [1/rad] aircraft rolling-moment coefficient derivative dCl_roll/d(delta_a).
-Aircraft.Specs.Dynamics.Lateral.Clp = -0.45;
+% Placeholder aircraft roll derivatives for the time-to-bank check. CrlDeltaA
+% is aircraft-level dCrl/d(delta_a), not the local section lift derivative.
+Aircraft.Specs.Dynamics.Lateral.CrlDeltaA = 0.08; % [1/rad] aircraft rolling-moment coefficient derivative.
+Aircraft.Specs.Dynamics.Lateral.Crlp = -0.45; % [1/rad] aircraft roll-damping derivative dCrl/d(p*b/2V).
 Aircraft.Specs.Dynamics.Lateral.Cndr = -0.25;
 
 % Geometry uses the NASA/Boeing X-48B aspect ratio scaled to 100 ft span.
@@ -166,7 +167,7 @@ Surfaces.DualElevon.SectionClDelta = 3.0;  % [1/rad] local 2D dcl/d(delta_elevon
 Surfaces.Aileron = Planform;
 Surfaces.Aileron.Name = "Roll Elevon";
 Surfaces.Aileron.ChordFractions = 0.40; % [-] max roll-only chord fraction; combined with dual-use by a shared bound.
-Surfaces.Aileron.SectionClDelta = 2.5;  % [1/rad] local 2D dcl/d(delta_elevon); roll Cl is integrated from this.
+Surfaces.Aileron.SectionClDelta = 3.0;  % [1/rad] local 2D dcl/d(delta_elevon); CrlDeltaA is integrated from this.
 
 Surfaces.Rudder.TauControlEff = 0.85; % [-] rudder hinge/control effectiveness factor.
 % Rudder still uses a small candidate grid because it is independent of the
@@ -182,7 +183,7 @@ SizingSweep = SizingOpt;
 
 if RunCgSweep
     XcgMAC = linspace(Aircraft.Specs.Dynamics.CG.ForwardMAC, Aircraft.Specs.Dynamics.CG.AftMAC, 3)';
-    AreaFraction = zeros(size(XcgMAC));
+    PitchAreaFraction = zeros(size(XcgMAC));
     Converged = zeros(size(XcgMAC));
 
     for icg = 1:length(XcgMAC)
@@ -195,17 +196,17 @@ if RunCgSweep
         % Re-run the full CasADi sizing at this CG location. This is an
         % optimized sizing sweep, not just a post-processing sensitivity.
         SweepSizing = DynamicsPkg.OptimizeSharedElevons(Aircraft, SweepCases, Surfaces);
-        AreaFraction(icg) = SweepSizing.Elevator.AreaFraction;
+        PitchAreaFraction(icg) = SweepSizing.Casadi.PitchAreaFraction;
         Converged(icg) = SweepSizing.Converged;
     end
 else
     XcgMAC = Cases.LongitudinalTrim.XcgMAC;
-    AreaFraction = SizingOpt.Elevator.AreaFraction;
+    PitchAreaFraction = SizingOpt.Casadi.PitchAreaFraction;
     Converged = SizingOpt.Converged;
 end
 
 CgSweep.XcgMAC = XcgMAC;
-CgSweep.AreaFraction = AreaFraction;
+CgSweep.PitchAreaFraction = PitchAreaFraction;
 CgSweep.Converged = Converged;
 
 fprintf(1, "Required pitch authority area fraction: %.3f\n", SizingOpt.Elevator.AreaFraction);
@@ -246,13 +247,13 @@ end
 
 figure;
 if RunCgSweep
-    plot(CgSweep.XcgMAC, CgSweep.AreaFraction, "LineWidth", 1.5);
+    plot(CgSweep.XcgMAC, CgSweep.PitchAreaFraction, "LineWidth", 1.5);
 else
-    plot(CgSweep.XcgMAC, CgSweep.AreaFraction, "o", "MarkerSize", 8, "LineWidth", 1.5);
+    plot(CgSweep.XcgMAC, CgSweep.PitchAreaFraction, "o", "MarkerSize", 8, "LineWidth", 1.5);
 end
 hold on
 xlim([Aircraft.Specs.Dynamics.CG.ForwardMAC, Aircraft.Specs.Dynamics.CG.AftMAC]);
-AreaLimit = max(0.06, 1.2 * max(CgSweep.AreaFraction));
+AreaLimit = max(0.06, 1.2 * max(CgSweep.PitchAreaFraction));
 ylim([0, AreaLimit]);
 ForwardCG = Aircraft.Specs.Dynamics.CG.ForwardMAC;
 AftCG = Aircraft.Specs.Dynamics.CG.AftMAC;
@@ -265,11 +266,11 @@ text(AftCG - LabelInset, 0.08 * AreaLimit, "Aft CG limit", ...
     "HorizontalAlignment", "right", "VerticalAlignment", "bottom");
 grid on
 xlabel("CG location, x_{cg} / MAC");
-ylabel("Required elevon area fraction, S_e / S");
+ylabel("Pitch-required elevon area fraction, S_{e,pitch} / S");
 if RunCgSweep
-    title("Elevon Sizing vs CG");
+    title("Pitch Elevon Requirement vs CG");
 else
-    title("Selected Elevon Sizing Point");
+    title("Selected Pitch Elevon Sizing Point");
 end
 saveas(gcf, fullfile(OutputDir, "elevator_area_vs_cg.png"));
 
