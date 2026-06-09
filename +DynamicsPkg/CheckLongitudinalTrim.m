@@ -2,7 +2,7 @@ function [Check] = CheckLongitudinalTrim(Aircraft, Case, Elevator)
 %
 % [Check] = CheckLongitudinalTrim(Aircraft, Case, Elevator)
 %
-% Check level-flight trim using the paper's Eq. 3.1-3.5.
+% Check level-flight trim using the source-method trim equations.
 %
 
 TrimCase.Alt = Case.Alt;

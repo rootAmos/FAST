@@ -7,7 +7,7 @@ function [Check] = CheckDirectionalTrim(Aircraft, Case, Rudder)
 
 Lat = Aircraft.Specs.Dynamics.Lateral;
 
-Cndr = Lat.Cndr * Rudder.EtaControl * Rudder.AreaFraction;
+Cndr = Lat.Cndr * Rudder.TauControlEff * Rudder.AreaFraction;
 Delta = -Case.RequiredCn / Cndr;
 
 Check.Name = Case.Name;

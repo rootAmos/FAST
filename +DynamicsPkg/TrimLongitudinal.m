@@ -54,8 +54,8 @@ if isfield(Elevon, 'CLdeltaEffective') && isfield(Elevon, 'CmdeltaEffective')
     CLdelta = Elevon.CLdeltaEffective;
     Cmdelta = Elevon.CmdeltaEffective + Elevon.CLdeltaEffective .* DxOverC;
 else
-    CLdelta = Aero.CLdelta .* Elevon.EtaControl .* Elevon.AreaFraction;
-    Cmdelta = Aero.Cmdelta .* Elevon.EtaControl .* Elevon.AreaFraction;
+    CLdelta = Aero.CLdelta .* Elevon.TauControlEff .* Elevon.AreaFraction;
+    Cmdelta = Aero.Cmdelta .* Elevon.TauControlEff .* Elevon.AreaFraction;
 end
 
 % Nelson, Eq. 2.51: elevator/elevon angle required to trim at CLtrim.

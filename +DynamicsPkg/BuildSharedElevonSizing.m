@@ -7,6 +7,9 @@ function [Sizing] = BuildSharedElevonSizing(Aircraft, Cases, Surfaces, PitchPane
 %
 
 MaxStation = Surfaces.MaxModelHalfSpanStation;
+
+% Convert optimized chord-fraction vectors back into FAST-style surface
+% structs. Dual-use panels contribute to both pitch and roll checks.
 PitchOnlySegments = build_segments(Aircraft, Surfaces.Elevator, PitchPanels, PitchChordValue, MaxStation, "Pitch-only elevon");
 DualSegments = build_segments(Aircraft, Surfaces.DualElevon, OutboardPanels, DualChordValue, MaxStation, "Dual-use elevon");
 RollOnlySegments = build_segments(Aircraft, Surfaces.Aileron, OutboardPanels, RollChordValue, MaxStation, "Roll-only elevon");
@@ -87,7 +90,7 @@ Trial.ChordFraction = max(cellfun(@(Segment) Segment.ChordFraction, Segments));
 Trial.AreaFraction = sum(cellfun(@(Segment) Segment.AreaFraction, Segments));
 Trial.CLdeltaEffective = sum(cellfun(@(Segment) Segment.CLdeltaEffective, Segments));
 Trial.CmdeltaEffective = sum(cellfun(@(Segment) Segment.CmdeltaEffective, Segments));
-Trial.EtaControl = Surface.EtaControl;
+Trial.TauControlEff = Surface.TauControlEff;
 
 end
 

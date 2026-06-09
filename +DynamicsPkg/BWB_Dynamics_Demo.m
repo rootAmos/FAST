@@ -24,6 +24,9 @@ clc, close all
 
 Aircraft = AircraftSpecsPkg.Example();
 BaselineWingLoading = Aircraft.Specs.Aero.W_S.SLS;
+FtPerM = 3.280839895;      % [ft/m] exact unit conversion used for reporting and station limits.
+MPerFt = 1 / FtPerM;       % [m/ft] exact inverse conversion used for X-48 dimensions.
+M2PerFt2 = MPerFt ^ 2;     % [m^2/ft^2] exact area conversion used for X-48 reference area.
 
 %% LONGITUDINAL AERO INPUTS %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -59,7 +62,7 @@ Aircraft.Specs.Dynamics.Longitudinal.CDdelta = 0.08;
 Aircraft.Specs.Dynamics.Longitudinal.CLmaxTko = 1.8;
 Aircraft.Specs.Dynamics.Longitudinal.CLmaxLnd = 1.9;
 
-% Control/alpha limits used by the paper-style checks.
+% Control/alpha limits used by the sizing-method feasibility checks.
 Aircraft.Specs.Dynamics.Longitudinal.DeltaMax = deg2rad(25);
 Aircraft.Specs.Dynamics.Longitudinal.AlphaMax = deg2rad(28);
 
@@ -69,23 +72,23 @@ Aircraft.Specs.Dynamics.Longitudinal.XrefMAC = 0.25;
 %% LATERAL AND GEOMETRY INPUTS %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% Placeholder roll derivatives for the time-to-bank check.
-Aircraft.Specs.Dynamics.Lateral.Clda = 0.08;
+% Placeholder aircraft roll derivatives for the time-to-bank check.
+Aircraft.Specs.Dynamics.Lateral.Clda = 0.08; % [1/rad] aircraft rolling-moment coefficient derivative dCl_roll/d(delta_a).
 Aircraft.Specs.Dynamics.Lateral.Clp = -0.45;
 Aircraft.Specs.Dynamics.Lateral.Cndr = -0.25;
 
 % Geometry uses the NASA/Boeing X-48B aspect ratio scaled to 100 ft span.
-BaselineSpan = 35;
-BaselineIxx = 1.2e6;
-X48Span = 20.4 * 0.3048;
-X48Area = 100.5 * 0.092903;
+BaselineSpan = 35 * MPerFt;         % [m] reference span for the inertia scaling placeholder.
+BaselineIxx = 1.2e6;                % [kg-m^2] placeholder roll inertia at BaselineSpan.
+X48Span = 20.4 * MPerFt;            % [m] published X-48B span.
+X48Area = 100.5 * M2PerFt2;         % [m^2] published X-48B planform area.
 X48AspectRatio = X48Span ^ 2 / X48Area;
-Aircraft.Specs.Dynamics.Geometry.b = 100 * 0.3048;
+Aircraft.Specs.Dynamics.Geometry.b = 100 * MPerFt; % [m] target full span for this BWB demo.
 Aircraft.Specs.Aero.S = Aircraft.Specs.Dynamics.Geometry.b ^ 2 / X48AspectRatio;
 Aircraft.Specs.Weight.MTOW = BaselineWingLoading * Aircraft.Specs.Aero.S;
 Aircraft.Specs.Aero.W_S.SLS = BaselineWingLoading;
-% Demo-only placeholder; a real BWB spec should provide MLW directly.
-Aircraft.Specs.Weight.MLW = 0.86 * Aircraft.Specs.Weight.MTOW;
+LandingWeightFraction = 0.86; % [-] demo-only placeholder; a real BWB spec should provide MLW directly.
+Aircraft.Specs.Weight.MLW = LandingWeightFraction * Aircraft.Specs.Weight.MTOW;
 Aircraft.Specs.Dynamics.Geometry.cbar = Aircraft.Specs.Aero.S / Aircraft.Specs.Dynamics.Geometry.b;
 Aircraft.Specs.Dynamics.Inertia.Ixx = BaselineIxx * (Aircraft.Specs.Dynamics.Geometry.b / BaselineSpan) ^ 2;
 
@@ -108,74 +111,72 @@ end
 
 ChordFile = fullfile(OutputDir, "bwb_chord_vs_span.csv");
 ChordTable = readtable(ChordFile);
+
+% The chord table comes from an X-48 planform outline. The table's station
+% coordinates are model-space half-span stations, so this scale maps every
+% extracted length to the 100 ft aircraft half-span used in the demo.
 MaxModelHalfSpanStation = max(abs(ChordTable.span_station_x));
 ChordScale = (Aircraft.Specs.Dynamics.Geometry.b / 2) / MaxModelHalfSpanStation;
 RightChord = ChordTable(ChordTable.normalized_span_eta >= 0, :);
+
+% ChordEta is the nondimensional half-span location. ChordLength and the
+% leading/trailing-edge x locations are physical lengths after scaling.
 ChordEta = RightChord.normalized_span_eta;
 ChordLength = RightChord.chord_length * ChordScale;
 ChordLeadingEdgeX = -RightChord.leading_edge_y * ChordScale;
 ChordTrailingEdgeX = -RightChord.trailing_edge_y * ChordScale;
 
-%% PAPER-STYLE CONTROL SURFACE SIZING %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% BWB CONTROL SURFACE SIZING %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Build named control cases from the Flying-V control sizing method.
 Cases = DynamicsPkg.BuildControlSizingCases(Aircraft);
 
-% Pitch elevons use 0-10 ft; dual-use and roll elevons use 20-45 ft.
-StationToEta = @(Station) Station / MaxModelHalfSpanStation;
-FtToStation = @(DistanceFt) (DistanceFt / 3.280839895) / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation;
-FtPerM = 3.280839895;
-MaxControlSurfaceSpan = 5 / FtPerM;
-Surfaces.ForbiddenEta = StationToEta([FtToStation(10), FtToStation(20)]);
+% Convert physical half-span distances into the X-48 station coordinate used
+% by the chord table. Pitch elevons use 0-10 ft; dual-use and roll elevons
+% use 20-45 ft, leaving 10-20 ft clear for the body-to-wing transition.
+FtToStation = @(DistanceFt) (DistanceFt / FtPerM) / (Aircraft.Specs.Dynamics.Geometry.b / 2) * MaxModelHalfSpanStation;
+
 Surfaces.MaxModelHalfSpanStation = MaxModelHalfSpanStation;
-Surfaces.MaxControlSurfaceSpan = MaxControlSurfaceSpan;
-Surfaces.PanelStationWidth = 0.2;
-Surfaces.PitchStationRange = FtToStation([0, 10]);
-Surfaces.OutboardStationRange = FtToStation([20, 45]);
-Surfaces.OutboardEtaStations = StationToEta(linspace(Surfaces.OutboardStationRange(1), Surfaces.OutboardStationRange(2), 8))';
-Surfaces.PitchOutEtaStations = StationToEta(linspace(Surfaces.PitchStationRange(1), Surfaces.PitchStationRange(2), 6))';
+Surfaces.MaxControlSurfaceSpan = 5 / FtPerM; % [m] reporting split limit; optimized panels are no longer than 5 ft.
+Surfaces.PanelStationWidth = FtToStation(5); % [station] each optimizer panel spans at most 5 physical ft.
+Surfaces.PitchStationRange = FtToStation([0, 10]); % [station] pitch elevon allowed from centerline to 10 ft.
+Surfaces.OutboardStationRange = FtToStation([20, 45]); % [station] dual/roll elevons allowed from 20 to 45 ft.
 
-Surfaces.SharedTrailingEdge = 1;
+% Planform fields let the optimizer interpolate local chord and x-location
+% from span station. TauControlEff is the assumed hinge/control efficiency.
+Planform.TauControlEff = 0.85;              % [-] control effectiveness factor multiplying section derivatives.
+Planform.ChordEta = ChordEta;               % [-] nondimensional half-span lookup coordinate.
+Planform.ChordLength = ChordLength;         % [m] local full chord from the scaled X-48 outline.
+Planform.ChordLeadingEdgeX = ChordLeadingEdgeX;   % [m] local leading-edge x-location.
+Planform.ChordTrailingEdgeX = ChordTrailingEdgeX; % [m] local trailing-edge x-location.
+
+Surfaces.SharedTrailingEdge = 1; % dual-use and roll-only panels share outboard trailing-edge chord.
+
+Surfaces.Elevator = Planform;
 Surfaces.Elevator.Name = "Pitch Elevon";
-Surfaces.Elevator.EtaControl = 0.85;
-Surfaces.Elevator.ChordFractions = 0.25;
-Surfaces.Elevator.EtaStations = Surfaces.PitchOutEtaStations;
-Surfaces.Elevator.ChordEta = ChordEta;
-Surfaces.Elevator.ChordLength = ChordLength;
-Surfaces.Elevator.ChordLeadingEdgeX = ChordLeadingEdgeX;
-Surfaces.Elevator.ChordTrailingEdgeX = ChordTrailingEdgeX;
-Surfaces.Elevator.SectionClDelta = 3.0;
-Surfaces.Elevator.UsePhysicalArea = 1;
+Surfaces.Elevator.ChordFractions = 0.25; % [-] max local chord fraction inside 10 ft; CasADi chooses actual panel fractions.
+Surfaces.Elevator.SectionClDelta = 3.0;  % [1/rad] local 2D dcl/d(delta_elevon), where delta_elevon is panel deflection.
 
+Surfaces.DualElevon = Planform;
 Surfaces.DualElevon.Name = "Dual-Use Elevon";
-Surfaces.DualElevon.EtaControl = 0.85;
-Surfaces.DualElevon.ChordFractions = 0.40;
-Surfaces.DualElevon.EtaStations = Surfaces.OutboardEtaStations;
-Surfaces.DualElevon.ChordEta = ChordEta;
-Surfaces.DualElevon.ChordLength = ChordLength;
-Surfaces.DualElevon.ChordLeadingEdgeX = ChordLeadingEdgeX;
-Surfaces.DualElevon.ChordTrailingEdgeX = ChordTrailingEdgeX;
-Surfaces.DualElevon.SectionClDelta = 3.0;
-Surfaces.DualElevon.UsePhysicalArea = 1;
+Surfaces.DualElevon.ChordFractions = 0.40; % [-] max local chord fraction outside 20 ft for shared pitch+roll use.
+Surfaces.DualElevon.SectionClDelta = 3.0;  % [1/rad] local 2D dcl/d(delta_elevon) for pitch/roll dual use.
 
+Surfaces.Aileron = Planform;
 Surfaces.Aileron.Name = "Roll Elevon";
-Surfaces.Aileron.EtaControl = 0.85;
-Surfaces.Aileron.ChordFractions = 0.40;
-Surfaces.Aileron.EtaStations = Surfaces.OutboardEtaStations;
-Surfaces.Aileron.ReferenceChord = (Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS) / Aircraft.Specs.Dynamics.Geometry.b;
-Surfaces.Aileron.ChordEta = ChordEta;
-Surfaces.Aileron.ChordLength = ChordLength;
-Surfaces.Aileron.ChordLeadingEdgeX = ChordLeadingEdgeX;
-Surfaces.Aileron.ChordTrailingEdgeX = ChordTrailingEdgeX;
-Surfaces.Aileron.SectionClDelta = 2.5;
-Surfaces.Aileron.UsePhysicalArea = 1;
+Surfaces.Aileron.ChordFractions = 0.40; % [-] max roll-only chord fraction; combined with dual-use by a shared bound.
+Surfaces.Aileron.SectionClDelta = 2.5;  % [1/rad] local 2D dcl/d(delta_elevon); roll Cl is integrated from this.
 
-Surfaces.Rudder.EtaControl = 0.85;
-Surfaces.Rudder.ChordFractions = linspace(0.10, 0.35, 6)';
-Surfaces.Rudder.SpanFractions = linspace(0.10, 0.80, 15)';
+Surfaces.Rudder.TauControlEff = 0.85; % [-] rudder hinge/control effectiveness factor.
+% Rudder still uses a small candidate grid because it is independent of the
+% shared elevon CasADi allocation.
+Surfaces.Rudder.ChordFractions = linspace(0.10, 0.35, 6)'; % [-] candidate rudder chord fractions.
+Surfaces.Rudder.SpanFractions = linspace(0.10, 0.80, 15)'; % [-] candidate rudder span fractions.
 
-% Optimize the shared pitch/dual-use/roll elevon layout against the checks.
+% This is the main sizing call. OptimizeSharedElevons builds the panel
+% geometry and calls the CasADi/Ipopt solve; it returns the selected panels
+% plus post-solve numeric feasibility checks for reporting.
 SizingOpt = DynamicsPkg.OptimizeSharedElevons(Aircraft, Cases, Surfaces);
 SizingSweep = SizingOpt;
 
@@ -189,6 +190,10 @@ if RunCgSweep
         SweepCases.LongitudinalTrim.XcgMAC = XcgMAC(icg);
         SweepCases.Pullup.XcgMAC = XcgMAC(icg);
         SweepCases.TakeoffRotation.XcgMAC = XcgMAC(icg);
+        SweepCases.CruiseTrim.XcgMAC = XcgMAC(icg);
+
+        % Re-run the full CasADi sizing at this CG location. This is an
+        % optimized sizing sweep, not just a post-processing sensitivity.
         SweepSizing = DynamicsPkg.OptimizeSharedElevons(Aircraft, SweepCases, Surfaces);
         AreaFraction(icg) = SweepSizing.Elevator.AreaFraction;
         Converged(icg) = SweepSizing.Converged;

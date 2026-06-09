@@ -2,7 +2,7 @@ function [Check] = CheckTakeoffRotation(Aircraft, Case, Elevator)
 %
 % [Check] = CheckTakeoffRotation(Aircraft, Case, Elevator)
 %
-% Estimate rotation speed using the paper's Eq. 3.23.
+% Estimate rotation speed from the main-gear pitching moment balance.
 %
 
 g = 9.81;
@@ -23,8 +23,8 @@ if isfield(Elevator, 'CLdeltaEffective') && isfield(Elevator, 'CmdeltaEffective'
     CLdelta = Elevator.CLdeltaEffective;
     CmdeltaRef = Elevator.CmdeltaEffective;
 else
-    CLdelta = Aero.CLdelta * Elevator.EtaControl * Elevator.AreaFraction;
-    CmdeltaRef = Aero.Cmdelta * Elevator.EtaControl * Elevator.AreaFraction;
+    CLdelta = Aero.CLdelta * Elevator.TauControlEff * Elevator.AreaFraction;
+    CmdeltaRef = Aero.Cmdelta * Elevator.TauControlEff * Elevator.AreaFraction;
 end
 
 CL = Aero.CL0 + Aero.CLalpha * Case.AlphaGround + ...

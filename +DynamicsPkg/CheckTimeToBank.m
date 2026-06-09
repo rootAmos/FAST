@@ -2,7 +2,7 @@ function [Check] = CheckTimeToBank(Aircraft, Case, Aileron)
 %
 % [Check] = CheckTimeToBank(Aircraft, Case, Aileron)
 %
-% Check time-to-bank using the paper's Eq. 3.6-3.8.
+% Check time-to-bank using the source-method roll response equations.
 %
 
 Lat = Aircraft.Specs.Dynamics.Lateral;
@@ -14,15 +14,15 @@ Inertia = Aircraft.Specs.Dynamics.Inertia;
 
 Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
 qbar = 0.5 * Rho * V ^ 2;
-Clda = Lat.Clda * Aileron.EtaControl * Aileron.AreaFraction;
+Clda = Lat.Clda * Aileron.TauControlEff * Aileron.AreaFraction;
 if isfield(Aileron, 'Segments')
     CldaIntegral = 0;
     for isegment = 1:length(Aileron.Segments)
         CldaIntegral = CldaIntegral + ControlRollIntegral(Aircraft, Aileron.Segments{isegment});
     end
-    Clda = 2 * Aileron.EtaControl * CldaIntegral / (Sref * Geom.b);
+    Clda = 2 * Aileron.TauControlEff * CldaIntegral / (Sref * Geom.b);
 elseif isfield(Aileron, 'YInboard') && isfield(Aileron, 'YOutboard')
-    Clda = 2 * Aileron.EtaControl * ControlRollIntegral(Aircraft, Aileron) / (Sref * Geom.b);
+    Clda = 2 * Aileron.TauControlEff * ControlRollIntegral(Aircraft, Aileron) / (Sref * Geom.b);
 end
 Lp = qbar * Sref * Geom.b ^ 2 * Lat.Clp / (2 * V * Inertia.Ixx);
 
@@ -67,6 +67,8 @@ Sref = Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS;
     end
 
 ControlChord = Surface.ChordFraction * LocalChord;
+% SectionClDelta is local 2D dcl/d(delta_elevon) [1/rad]; integrating
+% c(y)*y gives the dimensional roll-control derivative before Sref*b scaling.
 RollIntegral = SectionClDelta * trapz(y, ControlChord .* y);
 
 end

@@ -37,6 +37,10 @@ area(AvailableHalfSpan, AvailableChordFraction, ...
 
 DrawSegmentBand(PitchOnlySegments, [0.20, 0.45, 0.85], FtPerM, 0, MaxPanelSpanFt);
 DrawSegmentBand(DualSegments, [0.20, 0.70, 0.55], FtPerM, 0, MaxPanelSpanFt);
+
+% Roll-only chord is drawn above the dual-use chord to show the shared
+% outboard chord budget. It is an adjacent chord allocation, not a second
+% surface stacked on top of the dual-use elevon.
 DrawSegmentBand(RollOnlySegments, [0.95, 0.62, 0.05], FtPerM, MaxSegmentChord(DualSegments), MaxPanelSpanFt);
 patch([RudderIn, RudderOut, RudderOut, RudderIn], ...
     [0, 0, Sizing.Rudder.ChordFraction, Sizing.Rudder.ChordFraction], ...

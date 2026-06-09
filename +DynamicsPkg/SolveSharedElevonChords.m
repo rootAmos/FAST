@@ -1,5 +1,5 @@
 function [PitchChordValue, DualChordValue, RollChordValue, Values] = SolveSharedElevonChords( ...
-    Aircraft, Cases, PitchCoeff, OutboardCoeff, PitchPanels, OutboardPanels, ...
+    Aircraft, Cases, PitchCoeff, DualCoeff, RollCoeff, PitchPanels, OutboardPanels, ...
     PitchMax, DualMax, RollMax, OutboardMax, MaxStation)
 %
 % [PitchChordValue, DualChordValue, RollChordValue, Values] = SolveSharedElevonChords(...)
@@ -10,11 +10,16 @@ function [PitchChordValue, DualChordValue, RollChordValue, Values] = SolveShared
 DynamicsPkg.SetupCasadi();
 import casadi.*
 
+% OptiProblem is CasADi's nonlinear programming model. The variables below
+% are the unknown chord fractions for each allowed spanwise panel.
 OptiProblem = Opti();
 PitchChord = OptiProblem.variable(length(PitchPanels.Inboard), 1);
 DualChord = OptiProblem.variable(length(OutboardPanels.Inboard), 1);
 RollChord = OptiProblem.variable(length(OutboardPanels.Inboard), 1);
 
+% Decision variables are chord fractions for consecutive spanwise panels.
+% Bounds enforce local chord limits; the dual+roll bound prevents two
+% controls from occupying more outboard trailing-edge chord than exists.
 OptiProblem.subject_to(PitchChord >= 0);
 OptiProblem.subject_to(PitchChord <= PitchMax);
 OptiProblem.subject_to(DualChord >= 0);
@@ -23,16 +28,23 @@ OptiProblem.subject_to(RollChord >= 0);
 OptiProblem.subject_to(RollChord <= RollMax);
 OptiProblem.subject_to(DualChord + RollChord <= OutboardMax);
 
-PitchCLdelta = PitchCoeff.CL' * PitchChord + OutboardCoeff.CL' * DualChord;
-PitchCmdelta = PitchCoeff.Cm' * PitchChord + OutboardCoeff.Cm' * DualChord;
-RollIntegral = OutboardCoeff.Roll' * (DualChord + RollChord);
+PitchCLdelta = PitchCoeff.CL' * PitchChord + DualCoeff.CL' * DualChord;
+PitchCmdelta = PitchCoeff.Cm' * PitchChord + DualCoeff.Cm' * DualChord;
 
+% Roll authority comes from both outboard chord allocations. This is not
+% double-counting area: DualChord and RollChord share the same span stations,
+% and the constraint DualChord + RollChord <= OutboardMax caps the total
+% occupied trailing-edge chord at each station.
+RollIntegral = DualCoeff.Roll' * DualChord + RollCoeff.Roll' * RollChord;
+
+% These constraints mirror the numeric Check* validators, but are written as
+% CasADi scalar expressions so Ipopt can size the panel chord fractions.
 apply_pitch_constraints(OptiProblem, Aircraft, Cases.LongitudinalTrim, PitchCLdelta, PitchCmdelta);
 apply_pullup_constraints(OptiProblem, Aircraft, Cases.Pullup, PitchCLdelta, PitchCmdelta);
 apply_pitch_constraints(OptiProblem, Aircraft, Cases.CruiseTrim, PitchCLdelta, PitchCmdelta);
 apply_roll_constraint(OptiProblem, Aircraft, Cases.TimeToBank, RollIntegral);
 
-PhysicalArea = PitchCoeff.Area' * PitchChord + OutboardCoeff.Area' * DualChord + OutboardCoeff.Area' * RollChord;
+PhysicalArea = PitchCoeff.Area' * PitchChord + DualCoeff.Area' * DualChord + RollCoeff.Area' * RollChord;
 CenterBias = 1.0e-5 * (PitchPanels.Center' * PitchChord + OutboardPanels.Center' * DualChord) / MaxStation;
 OptiProblem.minimize(PhysicalArea + CenterBias);
 OptiProblem.solver('ipopt', struct('print_time', false), struct('print_level', 0));
@@ -40,16 +52,18 @@ OptiProblem.set_initial(PitchChord, 0.05);
 OptiProblem.set_initial(DualChord, 0.05);
 OptiProblem.set_initial(RollChord, 0.05);
 
+% This line runs Ipopt through CasADi and produces the optimized chord
+% fractions. Everything before this point only builds the symbolic problem.
 Sol = OptiProblem.solve();
 PitchChordValue = full(Sol.value(PitchChord));
 DualChordValue = full(Sol.value(DualChord));
 RollChordValue = full(Sol.value(RollChord));
-Values.PitchArea = PitchCoeff.Area' * PitchChordValue + OutboardCoeff.Area' * DualChordValue;
-Values.PitchCLdelta = PitchCoeff.CL' * PitchChordValue + OutboardCoeff.CL' * DualChordValue;
-Values.PitchCmdelta = PitchCoeff.Cm' * PitchChordValue + OutboardCoeff.Cm' * DualChordValue;
-Values.RollArea = OutboardCoeff.Area' * (DualChordValue + RollChordValue);
-Values.RollIntegral = OutboardCoeff.Roll' * (DualChordValue + RollChordValue);
-Values.PhysicalArea = PitchCoeff.Area' * PitchChordValue + OutboardCoeff.Area' * DualChordValue + OutboardCoeff.Area' * RollChordValue;
+Values.PitchArea = PitchCoeff.Area' * PitchChordValue + DualCoeff.Area' * DualChordValue;
+Values.PitchCLdelta = PitchCoeff.CL' * PitchChordValue + DualCoeff.CL' * DualChordValue;
+Values.PitchCmdelta = PitchCoeff.Cm' * PitchChordValue + DualCoeff.Cm' * DualChordValue;
+Values.RollArea = DualCoeff.Area' * DualChordValue + RollCoeff.Area' * RollChordValue;
+Values.RollIntegral = DualCoeff.Roll' * DualChordValue + RollCoeff.Roll' * RollChordValue;
+Values.PhysicalArea = PitchCoeff.Area' * PitchChordValue + DualCoeff.Area' * DualChordValue + RollCoeff.Area' * RollChordValue;
 
 end
 

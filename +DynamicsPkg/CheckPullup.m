@@ -2,7 +2,7 @@ function [Check] = CheckPullup(Aircraft, Case, Elevator)
 %
 % [Check] = CheckPullup(Aircraft, Case, Elevator)
 %
-% Check 1.3g longitudinal pull-up using the paper's Eq. 3.19-3.22.
+% Check 1.3g longitudinal pull-up using the source-method pull-up equations.
 %
 
 g = 9.81;
@@ -17,14 +17,14 @@ if isfield(Trim, 'Control')
     CLdelta = Trim.Control.CLdelta;
     Cmdelta = Trim.Control.Cmdelta;
 else
-    CLdelta = Aero.CLdelta * Elevator.EtaControl * Elevator.AreaFraction;
-    Cmdelta = Trim.Aero.Cmdelta * Elevator.EtaControl * Elevator.AreaFraction;
+    CLdelta = Aero.CLdelta * Elevator.TauControlEff * Elevator.AreaFraction;
+    Cmdelta = Trim.Aero.Cmdelta * Elevator.TauControlEff * Elevator.AreaFraction;
 end
 
 DeltaCL = (Case.NzFinal - 1) * Case.Mass * g ./ (Trim.qbar .* Trim.Sref);
 qhat = (Case.NzFinal - 1) * Geom.cbar * g ./ (2 * V .^ 2);
 
-% Eq. 3.21-3.22 solve for additional alpha and elevator deflection.
+% Solve for the additional alpha and elevator deflection needed at final Nz.
 A = [Aero.CLalpha, CLdelta; Trim.Aero.Cmalpha, Cmdelta];
 b = [DeltaCL - Aero.CLq * qhat; -Aero.Cmq * qhat];
 x = A \ b;

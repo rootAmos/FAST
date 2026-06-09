@@ -1,5 +1,21 @@
 % Contents of DynamicsPkg package:
 %
+% The BWB demo uses the NASA/Boeing X-48 planform outline to generate the
+% spanwise chord data, then scales that outline to the 100 ft span sizing
+% case used by DynamicsPkg.BWB_Dynamics_Demo.
+%
+% BWB sizing flow:
+%   DynamicsPkg.BWB_Dynamics_Demo
+%     -> DynamicsPkg.BuildControlSizingCases
+%     -> DynamicsPkg.OptimizeSharedElevons
+%        -> DynamicsPkg.BuildStationPanels
+%        -> DynamicsPkg.PanelCoefficients
+%        -> DynamicsPkg.SolveSharedElevonChords  (CasADi/Ipopt solve)
+%        -> DynamicsPkg.BuildSharedElevonSizing  (numeric Check* reports)
+%     -> DynamicsPkg.PlotSharedElevonAreas
+%
+% A Mermaid version of this workflow is in docs/dynamics_workflow.md.
+%
 % README               - DynamicsPkg.README is a function.
 %
 % Functions
@@ -22,5 +38,4 @@
 % SetupCasadi          - DynamicsPkg.SetupCasadi is a function.
 % SolveSharedElevonChords - DynamicsPkg.SolveSharedElevonChords is a function.
 % ControlSurfacePenalty - DynamicsPkg.ControlSurfacePenalty is a function.
-% SweepTrimEnvelope    - DynamicsPkg.SweepTrimEnvelope is a function.
 % SweepElevonCgSensitivity - DynamicsPkg.SweepElevonCgSensitivity is a function.

@@ -2,7 +2,7 @@ function [Cases] = BuildControlSizingCases(Aircraft)
 %
 % [Cases] = BuildControlSizingCases(Aircraft)
 %
-% Build paper-style control sizing cases for separate surface sizing.
+% Build the named feasibility cases used by the BWB control sizing method.
 %
 
 g = 9.81;

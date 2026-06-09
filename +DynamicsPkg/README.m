@@ -12,37 +12,30 @@ function [] = README()
 %     Nelson, R. C. Flight Stability and Automatic Control.
 %     Section 2.4.2, Elevator Angle to Trim, Equations 2.47-2.51.
 %
-% Simple trim workflow:
-%
-%     Aircraft = Main(AircraftSpecsPkg.Example, @MissionProfilesPkg.ParametricRegional);
-%     Aircraft.Specs.Dynamics.Longitudinal.CLalpha = 4.8;
-%     Aircraft.Specs.Dynamics.Longitudinal.CL0 = 0.15;
-%     Aircraft.Specs.Dynamics.Longitudinal.CLdelta = 0.30;
-%     Aircraft.Specs.Dynamics.Longitudinal.Cm0 = 0.015;
-%     Aircraft.Specs.Dynamics.Longitudinal.Cmalpha = -0.35;
-%     Aircraft.Specs.Dynamics.Longitudinal.Cmdelta = -0.85;
-%     Aircraft.Specs.Dynamics.Longitudinal.CD0 = 0.019;
-%     Aircraft.Specs.Dynamics.Longitudinal.K = 0.050;
-%     Aircraft.Specs.Dynamics.Longitudinal.XrefMAC = 0.25;
-%     TrimCase = DynamicsPkg.SweepTrimEnvelope(Aircraft);
-%     TrimCase.XcgMAC = 0.32;
-%     Trim = DynamicsPkg.TrimLongitudinal(Aircraft, TrimCase);
-%
 % BWB shared-elevon sizing workflow:
 %
 %     Cases = DynamicsPkg.BuildControlSizingCases(Aircraft);
-%     Surfaces.Elevator.EtaControl = 0.85;
+%     Surfaces.MaxModelHalfSpanStation = MaxModelHalfSpanStation;
+%     Surfaces.PanelStationWidth = FtToStation(5);
+%     Surfaces.PitchStationRange = FtToStation([0, 10]);
+%     Surfaces.OutboardStationRange = FtToStation([20, 45]);
+%     Planform.TauControlEff = 0.85;
+%     Planform.ChordEta = ChordEta;
+%     Planform.ChordLength = ChordLength;
+%     Planform.ChordLeadingEdgeX = ChordLeadingEdgeX;
+%     Planform.ChordTrailingEdgeX = ChordTrailingEdgeX;
+%     Surfaces.Elevator = Planform;
 %     Surfaces.Elevator.ChordFractions = 0.25;
-%     Surfaces.Aileron.EtaControl = 0.85;
+%     Surfaces.DualElevon = Planform;
 %     Surfaces.DualElevon.ChordFractions = 0.40;
+%     Surfaces.Aileron = Planform;
 %     Surfaces.Aileron.ChordFractions = 0.40;
-%     Surfaces.Aileron.ReferenceChord = ...
-%         (Aircraft.Specs.Weight.MTOW / Aircraft.Specs.Aero.W_S.SLS) / Aircraft.Specs.Dynamics.Geometry.b;
 %     Surfaces.Aileron.SectionClDelta = 2.5;
-%     Surfaces.Rudder.EtaControl = 0.85;
+%     Surfaces.Rudder.TauControlEff = 0.85;
 %     Surfaces.Rudder.ChordFractions = linspace(0.10, 0.35, 20)';
 %     Surfaces.Rudder.SpanFractions = linspace(0.05, 0.80, 152)';
 %     Sizing = DynamicsPkg.OptimizeSharedElevons(Aircraft, Cases, Surfaces);
+%     Aircraft = DynamicsPkg.ControlSurfacePenalty(Aircraft, Sizing);
 %
 % A standalone demo is available with:
 %
@@ -75,5 +68,10 @@ function [] = README()
 % OptimizeSharedElevons is the current BWB sizing entry point for a
 % pitch-only inboard section, a dual-use outboard section, a roll-only
 % outboard section, and a separately sized winglet rudder.
+%
+% ControlSurfacePenalty is the optional FAST feedback hook: it records the
+% selected control surfaces on Aircraft.Dynamics.ControlSurface, adjusts the
+% airframe weight calibration, and reduces mission L/D by the trim-drag
+% penalty from the selected elevon checks.
 %
 end

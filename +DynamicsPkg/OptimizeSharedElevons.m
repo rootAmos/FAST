@@ -2,7 +2,8 @@ function [Sizing] = OptimizeSharedElevons(Aircraft, Cases, Surfaces)
 %
 % [Sizing] = OptimizeSharedElevons(Aircraft, Cases, Surfaces)
 %
-% Optimize 0.2-station shared elevon panels with CasADi.
+% Prepare the shared elevon panel model, run the CasADi chord allocation,
+% and package the result into the numeric check/report structure.
 %
 
 if ~isfield(Surfaces, "SharedTrailingEdge") || ~Surfaces.SharedTrailingEdge
@@ -30,18 +31,25 @@ end
 PitchPanels = DynamicsPkg.BuildStationPanels(PitchStationIn, PitchStationOut, PanelWidth);
 OutboardPanels = DynamicsPkg.BuildStationPanels(OutboardStationIn, OutboardStationOut, PanelWidth);
 
+% Pre-integrate each candidate panel once. The CasADi problem then chooses
+% panel chord fractions without carrying interpolation/integration logic.
 PitchCoeff = DynamicsPkg.PanelCoefficients(Aircraft, Surfaces.Elevator, PitchPanels, MaxStation);
-OutboardCoeff = DynamicsPkg.PanelCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
+DualCoeff = DynamicsPkg.PanelCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
+RollCoeff = DynamicsPkg.PanelCoefficients(Aircraft, Surfaces.Aileron, OutboardPanels, MaxStation);
 
 PitchMax = max(Surfaces.Elevator.ChordFractions);
 DualMax = max(Surfaces.DualElevon.ChordFractions);
 RollMax = max(Surfaces.Aileron.ChordFractions);
 OutboardMax = max(DualMax, RollMax);
 
+% This is the CasADi/Ipopt optimization call. It returns the optimized chord
+% fraction for each pitch-only, dual-use, and roll-only spanwise panel.
 [PitchChordValue, DualChordValue, RollChordValue, SolverValues] = DynamicsPkg.SolveSharedElevonChords( ...
-    Aircraft, Cases, PitchCoeff, OutboardCoeff, PitchPanels, OutboardPanels, ...
+    Aircraft, Cases, PitchCoeff, DualCoeff, RollCoeff, PitchPanels, OutboardPanels, ...
     PitchMax, DualMax, RollMax, OutboardMax, MaxStation);
 
+% Convert the raw optimizer vectors into surface structs, then run the
+% numeric Check* functions so the output contains readable margins.
 Sizing = DynamicsPkg.BuildSharedElevonSizing(Aircraft, Cases, Surfaces, PitchPanels, OutboardPanels, ...
     PitchChordValue, DualChordValue, RollChordValue, SolverValues);
 
