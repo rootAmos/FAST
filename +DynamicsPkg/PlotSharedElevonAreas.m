@@ -41,7 +41,7 @@ patch([RudderIn, RudderOut, RudderOut, RudderIn], ...
     [0, 0, Sizing.Rudder.ChordFraction, Sizing.Rudder.ChordFraction], ...
     [0.55, 0.25, 0.70], "FaceAlpha", 0.85, "EdgeColor", [0.05, 0.12, 0.18], "LineWidth", 1.2);
 
-LimitLabel = sprintf("Max Chord Limit\navailable");
+LimitLabel = sprintf("Max Chord Fraction");
 DrawChordLimit(PitchOnlySegments, FtPerM, max(Sizing.Elevator.ChordFractions), LimitLabel, 0.025);
 DrawChordLimit(DualSegments, FtPerM, max(Sizing.DualElevon.ChordFractions), LimitLabel, 0.055);
 DrawChordLimitSpan(RudderIn, RudderOut, max(Sizing.Rudder.ChordFractions), LimitLabel, 0.025);

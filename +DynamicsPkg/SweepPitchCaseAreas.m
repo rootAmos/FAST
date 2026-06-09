@@ -75,8 +75,7 @@ else
 end
 
 Area = PitchCoeff.Area' * PitchChord + DualCoeff.Area' * DualChord;
-CenterBias = 1.0e-5 * (PitchPanels.Center' * PitchChord + OutboardPanels.Center' * DualChord) / MaxStation;
-OptiProblem.minimize(Area + CenterBias);
+OptiProblem.minimize(Area);
 OptiProblem.solver('ipopt', struct('print_time', false), struct('print_level', 0));
 OptiProblem.set_initial(PitchChord, 0.05);
 OptiProblem.set_initial(DualChord, 0.05);

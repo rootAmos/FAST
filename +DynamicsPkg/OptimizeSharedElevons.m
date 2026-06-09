@@ -43,7 +43,7 @@ OutboardMax = max(Surfaces.DualElevon.ChordFractions);
 % fraction for each pitch-only and outboard dual-use spanwise panel.
 [PitchChordValue, OutboardChordValue, SolverValues] = DynamicsPkg.SolveSharedElevonChords( ...
     Aircraft, Cases, PitchCoeff, OutboardCoeff, PitchPanels, OutboardPanels, ...
-    PitchMax, OutboardMax, MaxStation, Surfaces.DualElevon.TauControlEff);
+    PitchMax, OutboardMax, Surfaces.DualElevon.TauControlEff);
 
 % Convert the raw optimizer vectors into surface structs, then run the
 % numeric Check* functions so the output contains readable margins.

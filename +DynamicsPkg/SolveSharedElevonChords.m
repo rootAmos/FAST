@@ -1,6 +1,6 @@
 function [PitchChordValue, OutboardChordValue, Values] = SolveSharedElevonChords( ...
     Aircraft, Cases, PitchCoeff, OutboardCoeff, PitchPanels, OutboardPanels, ...
-    PitchMax, OutboardMax, MaxStation, OutboardTauControlEff)
+    PitchMax, OutboardMax, OutboardTauControlEff)
 %
 % [PitchChordValue, OutboardChordValue, Values] = SolveSharedElevonChords(...)
 %
@@ -40,8 +40,7 @@ apply_pitch_constraints(OptiProblem, Aircraft, Cases.CruiseTrim, PitchCLdelta, P
 apply_roll_constraint(OptiProblem, Aircraft, Cases.TimeToBank, RollIntegral, OutboardTauControlEff);
 
 PhysicalArea = PitchCoeff.Area' * PitchChord + OutboardCoeff.Area' * OutboardChord;
-CenterBias = 1.0e-5 * (PitchPanels.Center' * PitchChord + OutboardPanels.Center' * OutboardChord) / MaxStation;
-OptiProblem.minimize(PhysicalArea + CenterBias);
+OptiProblem.minimize(PhysicalArea);
 OptiProblem.solver('ipopt', struct('print_time', false), struct('print_level', 0));
 OptiProblem.set_initial(PitchChord, 0.05);
 OptiProblem.set_initial(OutboardChord, 0.05);
