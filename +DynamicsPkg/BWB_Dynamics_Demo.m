@@ -44,7 +44,9 @@ Aircraft.Specs.Dynamics.Longitudinal.CLdelta = 0.30;
 Aircraft.Specs.Dynamics.Longitudinal.Cm0 = 0.015;
 
 % Pitching-moment slope about the aero reference point, dCm/dalpha [1/rad].
-Aircraft.Specs.Dynamics.Longitudinal.Cmalpha = -0.35;
+% Chosen so the assumed CG envelope stays forward of the zero-trim-deflection
+% point; forward CG should remain the limiting pitch-control case.
+Aircraft.Specs.Dynamics.Longitudinal.Cmalpha = -0.80;
 
 % Elevator moment effectiveness, dCm/ddelta_e [1/rad].
 Aircraft.Specs.Dynamics.Longitudinal.Cmdelta = -0.85;
