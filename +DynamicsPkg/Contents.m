@@ -39,4 +39,3 @@
 % SolveSharedElevonChords - DynamicsPkg.SolveSharedElevonChords is a function.
 % SweepPitchCaseAreas - DynamicsPkg.SweepPitchCaseAreas is a function.
 % ControlSurfacePenalty - DynamicsPkg.ControlSurfacePenalty is a function.
-% SweepElevonCgSensitivity - DynamicsPkg.SweepElevonCgSensitivity is a function.

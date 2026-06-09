@@ -1,6 +1,6 @@
-function [SizingSweep, Cases, CgSweep, SizingOpt] = BWB_Dynamics_Demo(RunFullReport, RunCgSweep, RunCgSensitivity)
+function [SizingSweep, Cases, CgSweep, SizingOpt] = BWB_Dynamics_Demo(RunFullReport, RunCgSweep)
 %
-% [SizingSweep, Cases, CgSweep, SizingOpt] = BWB_Dynamics_Demo(RunFullReport, RunCgSweep, RunCgSensitivity)
+% [SizingSweep, Cases, CgSweep, SizingOpt] = BWB_Dynamics_Demo(RunFullReport, RunCgSweep)
 %
 % Demonstrate the DynamicsPkg trim and control-surface sizing workflow using a
 % FAST aircraft structure. Replace the aircraft spec with a BWB-specific
@@ -15,9 +15,6 @@ if nargin < 1
 end
 if nargin < 2
     RunCgSweep = false;
-end
-if nargin < 3
-    RunCgSensitivity = false;
 end
 
 clc, close all
@@ -280,37 +277,6 @@ else
     title("Selected Pitch Elevon Sizing Point");
 end
 saveas(gcf, fullfile(OutputDir, "elevator_area_vs_cg.png"));
-
-if RunCgSensitivity
-    XcgSensitivity = linspace(Aircraft.Specs.Dynamics.CG.ForwardMAC, Aircraft.Specs.Dynamics.CG.AftMAC, 25)';
-    CgSensitivity = DynamicsPkg.SweepElevonCgSensitivity(Aircraft, Cases, SizingOpt.Elevator, XcgSensitivity);
-
-    figure;
-    subplot(2, 1, 1)
-    plot(CgSensitivity.XcgMAC, [CgSensitivity.DeltaTrim, CgSensitivity.DeltaPullup, CgSensitivity.DeltaCruise] * 180 / pi, "LineWidth", 1.5)
-    hold on
-    yline(Aircraft.Specs.Dynamics.Longitudinal.DeltaMax * 180 / pi, "--");
-    xline(Aircraft.Specs.Dynamics.CG.ForwardMAC, "--", "Forward CG");
-    xline(Aircraft.Specs.Dynamics.CG.AftMAC, "--", "Aft CG");
-    xlim([Aircraft.Specs.Dynamics.CG.ForwardMAC, Aircraft.Specs.Dynamics.CG.AftMAC]);
-    grid on
-    ylabel("|delta_e| [deg]");
-    legend(["Trim", "Pull-up", "Cruise"], "Location", "best");
-    title("Selected Elevon CG Sensitivity")
-
-    subplot(2, 1, 2)
-    plot(CgSensitivity.XcgMAC, [CgSensitivity.AlphaTrim, CgSensitivity.AlphaPullup, CgSensitivity.AlphaCruise] * 180 / pi, "LineWidth", 1.5)
-    hold on
-    yline(Aircraft.Specs.Dynamics.Longitudinal.AlphaMax * 180 / pi, "--");
-    xline(Aircraft.Specs.Dynamics.CG.ForwardMAC, "--", "Forward CG");
-    xline(Aircraft.Specs.Dynamics.CG.AftMAC, "--", "Aft CG");
-    xlim([Aircraft.Specs.Dynamics.CG.ForwardMAC, Aircraft.Specs.Dynamics.CG.AftMAC]);
-    grid on
-    xlabel("CG location, x_{cg} / MAC");
-    ylabel("|alpha| [deg]");
-    legend(["Trim", "Pull-up", "Cruise"], "Location", "best");
-    saveas(gcf, fullfile(OutputDir, "selected_elevon_cg_sensitivity.png"));
-end
 
 % Final selected design margins.
 CaseLabels = categorical(["Trim"; "Pull-up"; "Cruise"]);

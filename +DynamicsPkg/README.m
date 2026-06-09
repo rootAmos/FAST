@@ -41,9 +41,8 @@ function [] = README()
 %
 % By default, the demo runs the shared-elevon optimizer and regenerates the
 % control-surface area plot only. Use BWB_Dynamics_Demo(true) for the full
-% report plots, BWB_Dynamics_Demo(true, true) to also re-optimize across
-% the CG envelope, or BWB_Dynamics_Demo(true, false, true) to plot the
-% selected elevon layout's CG sensitivity without re-optimizing.
+% report plots, or BWB_Dynamics_Demo(true, true) to also re-optimize across
+% the CG envelope.
 %
 % The trim solver does not infer stability derivatives. Provide them in
 % Aircraft.Specs.Dynamics.Longitudinal.
