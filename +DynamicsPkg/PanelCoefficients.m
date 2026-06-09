@@ -20,11 +20,12 @@ LocalChord = interp1(Surface.ChordEta, Surface.ChordLength, Eta, "linear", "extr
 Coeff.Area = 2 * trapz_rows(Y, LocalChord) / Sref;
 Coeff.Roll = Surface.SectionClDelta * trapz_rows(Y, LocalChord .* Y);
 
-% Pitch effectiveness uses the control center near the trailing edge and the
-% moment arm back to the aerodynamic reference location.
+% Pitch effectiveness uses a trailing-edge control strip. For chord fraction
+% f, the strip center is x_te - 0.5*f*c, so the moment derivative is not
+% purely linear in f. Coeff.CmLinear multiplies f; Coeff.CmQuadratic
+% multiplies f^2.
 CenterLeadingEdgeX = interp1(Surface.ChordEta, Surface.ChordLeadingEdgeX, 0, "linear", "extrap");
 LocalTrailingEdgeX = interp1(Surface.ChordEta, Surface.ChordTrailingEdgeX, Eta, "linear", "extrap");
-ControlCenterX = LocalTrailingEdgeX - 0.5 * LocalChord;
 Xref = CenterLeadingEdgeX + Aero.XrefMAC * Geom.cbar;
 if isfield(Surface, 'SectionClDelta')
     SectionClDelta = Surface.SectionClDelta;
@@ -37,7 +38,9 @@ end
 SectionLift = SectionClDelta * Surface.TauControlEff * LocalChord;
 
 Coeff.CL = 2 * trapz_rows(Y, SectionLift) / Sref;
-Coeff.Cm = -2 * trapz_rows(Y, SectionLift .* (ControlCenterX - Xref)) / (Sref * Geom.cbar);
+Coeff.CmLinear = -2 * trapz_rows(Y, SectionLift .* (LocalTrailingEdgeX - Xref)) / (Sref * Geom.cbar);
+Coeff.CmQuadratic = trapz_rows(Y, SectionLift .* LocalChord) / (Sref * Geom.cbar);
+Coeff.Cm = Coeff.CmLinear + Coeff.CmQuadratic;
 
 end
 

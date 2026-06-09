@@ -1,10 +1,10 @@
-function [PitchChordValue, DualChordValue, RollChordValue, Values] = SolveSharedElevonChords( ...
-    Aircraft, Cases, PitchCoeff, DualCoeff, RollCoeff, PitchPanels, OutboardPanels, ...
-    PitchMax, DualMax, RollMax, OutboardMax, MaxStation)
+function [PitchChordValue, OutboardChordValue, Values] = SolveSharedElevonChords( ...
+    Aircraft, Cases, PitchCoeff, OutboardCoeff, PitchPanels, OutboardPanels, ...
+    PitchMax, OutboardMax, MaxStation, OutboardTauControlEff)
 %
-% [PitchChordValue, DualChordValue, RollChordValue, Values] = SolveSharedElevonChords(...)
+% [PitchChordValue, OutboardChordValue, Values] = SolveSharedElevonChords(...)
 %
-% Solve the shared pitch/dual/roll panel chord allocation with CasADi.
+% Solve the pitch-only and outboard dual-use panel chord allocation with CasADi.
 %
 
 DynamicsPkg.SetupCasadi();
@@ -14,56 +14,57 @@ import casadi.*
 % are the unknown chord fractions for each allowed spanwise panel.
 OptiProblem = Opti();
 PitchChord = OptiProblem.variable(length(PitchPanels.Inboard), 1);
-DualChord = OptiProblem.variable(length(OutboardPanels.Inboard), 1);
-RollChord = OptiProblem.variable(length(OutboardPanels.Inboard), 1);
+OutboardChord = OptiProblem.variable(length(OutboardPanels.Inboard), 1);
 
 % Decision variables are chord fractions for consecutive spanwise panels.
-% Bounds enforce local chord limits; the dual+roll bound prevents two
-% controls from occupying more outboard trailing-edge chord than exists.
+% Bounds enforce local chord limits. The outboard variable is one physical
+% dual-use elevon surface: symmetric motion gives pitch, differential motion
+% gives roll, so there is no separate roll-only chord allocation.
 OptiProblem.subject_to(PitchChord >= 0);
 OptiProblem.subject_to(PitchChord <= PitchMax);
-OptiProblem.subject_to(DualChord >= 0);
-OptiProblem.subject_to(DualChord <= DualMax);
-OptiProblem.subject_to(RollChord >= 0);
-OptiProblem.subject_to(RollChord <= RollMax);
-OptiProblem.subject_to(DualChord + RollChord <= OutboardMax);
+OptiProblem.subject_to(OutboardChord >= 0);
+OptiProblem.subject_to(OutboardChord <= OutboardMax);
 
-PitchCLdelta = PitchCoeff.CL' * PitchChord + DualCoeff.CL' * DualChord;
-PitchCmdelta = PitchCoeff.Cm' * PitchChord + DualCoeff.Cm' * DualChord;
+PitchCLdelta = PitchCoeff.CL' * PitchChord + OutboardCoeff.CL' * OutboardChord;
+PitchCmdelta = pitch_moment(PitchCoeff, PitchChord) + pitch_moment(OutboardCoeff, OutboardChord);
 
-% Roll authority comes from both outboard chord allocations. This is not
-% double-counting area: DualChord and RollChord share the same span stations,
-% and the constraint DualChord + RollChord <= OutboardMax caps the total
-% occupied trailing-edge chord at each station.
-RollIntegral = DualCoeff.Roll' * DualChord + RollCoeff.Roll' * RollChord;
+% The same outboard surface also supplies roll authority when left and right
+% panels deflect differentially.
+RollIntegral = OutboardCoeff.Roll' * OutboardChord;
 
 % These constraints mirror the numeric Check* validators, but are written as
 % CasADi scalar expressions so Ipopt can size the panel chord fractions.
 apply_pitch_constraints(OptiProblem, Aircraft, Cases.LongitudinalTrim, PitchCLdelta, PitchCmdelta);
 apply_pullup_constraints(OptiProblem, Aircraft, Cases.Pullup, PitchCLdelta, PitchCmdelta);
 apply_pitch_constraints(OptiProblem, Aircraft, Cases.CruiseTrim, PitchCLdelta, PitchCmdelta);
-apply_roll_constraint(OptiProblem, Aircraft, Cases.TimeToBank, RollIntegral);
+apply_roll_constraint(OptiProblem, Aircraft, Cases.TimeToBank, RollIntegral, OutboardTauControlEff);
 
-PhysicalArea = PitchCoeff.Area' * PitchChord + DualCoeff.Area' * DualChord + RollCoeff.Area' * RollChord;
-CenterBias = 1.0e-5 * (PitchPanels.Center' * PitchChord + OutboardPanels.Center' * DualChord) / MaxStation;
+PhysicalArea = PitchCoeff.Area' * PitchChord + OutboardCoeff.Area' * OutboardChord;
+CenterBias = 1.0e-5 * (PitchPanels.Center' * PitchChord + OutboardPanels.Center' * OutboardChord) / MaxStation;
 OptiProblem.minimize(PhysicalArea + CenterBias);
 OptiProblem.solver('ipopt', struct('print_time', false), struct('print_level', 0));
 OptiProblem.set_initial(PitchChord, 0.05);
-OptiProblem.set_initial(DualChord, 0.05);
-OptiProblem.set_initial(RollChord, 0.05);
+OptiProblem.set_initial(OutboardChord, 0.05);
 
 % This line runs Ipopt through CasADi and produces the optimized chord
 % fractions. Everything before this point only builds the symbolic problem.
 Sol = OptiProblem.solve();
 PitchChordValue = full(Sol.value(PitchChord));
-DualChordValue = full(Sol.value(DualChord));
-RollChordValue = full(Sol.value(RollChord));
-Values.PitchArea = PitchCoeff.Area' * PitchChordValue + DualCoeff.Area' * DualChordValue;
-Values.PitchCLdelta = PitchCoeff.CL' * PitchChordValue + DualCoeff.CL' * DualChordValue;
-Values.PitchCmdelta = PitchCoeff.Cm' * PitchChordValue + DualCoeff.Cm' * DualChordValue;
-Values.RollArea = DualCoeff.Area' * DualChordValue + RollCoeff.Area' * RollChordValue;
-Values.RollIntegral = DualCoeff.Roll' * DualChordValue + RollCoeff.Roll' * RollChordValue;
-Values.PhysicalArea = PitchCoeff.Area' * PitchChordValue + DualCoeff.Area' * DualChordValue + RollCoeff.Area' * RollChordValue;
+OutboardChordValue = full(Sol.value(OutboardChord));
+Values.PitchArea = PitchCoeff.Area' * PitchChordValue + OutboardCoeff.Area' * OutboardChordValue;
+Values.PitchCLdelta = PitchCoeff.CL' * PitchChordValue + OutboardCoeff.CL' * OutboardChordValue;
+Values.PitchCmdelta = pitch_moment(PitchCoeff, PitchChordValue) + pitch_moment(OutboardCoeff, OutboardChordValue);
+Values.RollArea = OutboardCoeff.Area' * OutboardChordValue;
+Values.RollIntegral = OutboardCoeff.Roll' * OutboardChordValue;
+Values.PhysicalArea = PitchCoeff.Area' * PitchChordValue + OutboardCoeff.Area' * OutboardChordValue;
+
+end
+
+function [Cmdelta] = pitch_moment(Coeff, ChordFraction)
+% Moment derivative for a trailing-edge strip: force scales with f, while
+% strip-center x-location adds the f^2 correction.
+
+Cmdelta = Coeff.CmLinear' * ChordFraction + Coeff.CmQuadratic' * (ChordFraction .* ChordFraction);
 
 end
 
@@ -103,7 +104,7 @@ Opti.subject_to(-AlphaTrim - DeltaAlpha <= Case.AlphaMax);
 
 end
 
-function apply_roll_constraint(Opti, Aircraft, Case, RollIntegral)
+function apply_roll_constraint(Opti, Aircraft, Case, RollIntegral, TauControlEff)
 % Require the bank target to be reachable within the time limit.
 
 Lat = Aircraft.Specs.Dynamics.Lateral;
@@ -119,7 +120,7 @@ end
 [~, V, ~, ~, ~, Rho, ~] = MissionSegsPkg.ComputeFltCon(Case.Alt, 0, Case.VelType, Case.Vel);
 qbar = 0.5 * Rho * V ^ 2;
 Lp = qbar * Sref * Geom.b ^ 2 * Crlp / (2 * V * Inertia.Ixx);
-BankGain = abs((2 * V / Geom.b) * ((2 * 0.85 / (Sref * Geom.b)) / Crlp) * ...
+BankGain = abs((2 * V / Geom.b) * ((2 * TauControlEff / (Sref * Geom.b)) / Crlp) * ...
     (Case.TimeLimit + (1 / Lp) * (1 - exp(Lp * Case.TimeLimit))));
 Opti.subject_to(RollIntegral >= Case.BankTarget / (Case.MaxDeflection * BankGain));
 

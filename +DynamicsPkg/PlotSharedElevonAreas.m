@@ -2,7 +2,7 @@ function [] = PlotSharedElevonAreas(Sizing, ChordEta, ChordLength, MaxModelHalfS
 %
 % [] = PlotSharedElevonAreas(Sizing, ChordEta, ChordLength, MaxModelHalfSpanStation, HalfSpan, OutputFile)
 %
-% Plot selected pitch-only, dual-use, and roll-only elevon panels.
+% Plot selected pitch-only and outboard dual-use elevon panels.
 %
 
 if nargin < 6
@@ -18,7 +18,6 @@ end
 
 PitchOnlySegments = FilterSegmentsByName(Sizing.Elevator.Segments, "Pitch-only elevon");
 DualSegments = Sizing.DualElevon.Segments;
-RollOnlySegments = FilterSegmentsByName(Sizing.Aileron.Segments, "Roll-only elevon");
 
 AvailableHalfSpan = ChordEta * HalfSpan * FtPerM;
 NoElevonIn = 5 / MaxModelHalfSpanStation * HalfSpan * FtPerM;
@@ -38,29 +37,25 @@ area(AvailableHalfSpan, AvailableChordFraction, ...
 DrawSegmentBand(PitchOnlySegments, [0.20, 0.45, 0.85], FtPerM, 0, MaxPanelSpanFt, 0.85);
 DrawSegmentBand(DualSegments, [0.20, 0.70, 0.55], FtPerM, 0, MaxPanelSpanFt, 0.70);
 
-% Draw roll-only material above the dual-use material inside the same
-% outboard chord budget. The optimizer enforces DualChord + RollChord <= max
-% chord; the vertical split is the physical chord allocation within that cap.
-DrawSegmentBand(RollOnlySegments, [0.95, 0.62, 0.05], FtPerM, MaxSegmentChord(DualSegments), MaxPanelSpanFt, 0.70);
 patch([RudderIn, RudderOut, RudderOut, RudderIn], ...
     [0, 0, Sizing.Rudder.ChordFraction, Sizing.Rudder.ChordFraction], ...
     [0.55, 0.25, 0.70], "FaceAlpha", 0.85, "EdgeColor", [0.05, 0.12, 0.18], "LineWidth", 1.2);
 
+DrawChordLimit(PitchOnlySegments, FtPerM, max(Sizing.Elevator.ChordFractions), "Pitch max", 0.025);
+DrawChordLimit(DualSegments, FtPerM, max(Sizing.DualElevon.ChordFractions), "Dual-use max", 0.055);
+DrawChordLimitSpan(RudderIn, RudderOut, max(Sizing.Rudder.ChordFractions), "Rudder max", 0.025);
+
 PitchLabel = SegmentLabelPoint(PitchOnlySegments, FtPerM, 0);
 DualLabel = SegmentLabelPoint(DualSegments, FtPerM, 0);
-RollLabel = SegmentLabelPoint(RollOnlySegments, FtPerM, MaxSegmentChord(DualSegments));
 
 if ~isempty(PitchLabel)
     text(PitchLabel(1), PitchLabel(2) + 0.015, ...
         "Pitch Elevon", "HorizontalAlignment", "center", "FontWeight", "bold");
 end
 if ~isempty(DualLabel)
-    text(DualLabel(1), DualLabel(2) + 0.015, ...
-        "Dual-Use Elevon", "HorizontalAlignment", "center", "FontWeight", "bold");
-end
-if ~isempty(RollLabel)
-    text(RollLabel(1), RollLabel(2) + 0.015, ...
-        "Roll Elevon", "HorizontalAlignment", "center", "FontWeight", "bold");
+    text(DualLabel(1), max(DualLabel(2) - 0.035, 0.04), ...
+        "Dual-Use Elevon (Pitch/Roll)", "HorizontalAlignment", "center", ...
+        "VerticalAlignment", "top", "FontWeight", "bold");
 end
 text(mean([RudderIn, RudderOut]), Sizing.Rudder.ChordFraction + 0.015, ...
     "Winglet Rudder", "HorizontalAlignment", "center", "FontWeight", "bold");
@@ -85,7 +80,7 @@ Segments = SegmentsIn(Keep);
 end
 
 function DrawSegmentBand(Segments, FaceColor, FtPerM, ChordOffset, MaxPanelSpanFt, FaceAlpha)
-% Draw contiguous optimizer cells as one physical control surface band.
+% Draw each optimizer cell at its own selected chord fraction.
 
 if isempty(Segments)
     return
@@ -97,23 +92,39 @@ Chord = cellfun(@(Segment) Segment.ChordFraction, Segments);
 [StationIn, Order] = sort(StationIn);
 StationOut = StationOut(Order);
 Chord = Chord(Order);
-Breaks = [true; StationIn(2:end) > StationOut(1:end - 1) + 1.0e-6];
-BandId = cumsum(Breaks);
 
-for iband = 1:BandId(end)
-    Keep = BandId == iband;
-    BandIn = min(StationIn(Keep));
-    BandOut = max(StationOut(Keep));
-    BandChord = max(Chord(Keep));
-    PanelIn = BandIn;
-    while PanelIn < BandOut
-        PanelOut = min(PanelIn + MaxPanelSpanFt, BandOut);
+for isegment = 1:length(StationIn)
+    PanelIn = StationIn(isegment);
+    while PanelIn < StationOut(isegment)
+        PanelOut = min(PanelIn + MaxPanelSpanFt, StationOut(isegment));
         patch([PanelIn, PanelOut, PanelOut, PanelIn], ...
-            ChordOffset + [0, 0, BandChord, BandChord], ...
+            ChordOffset + [0, 0, Chord(isegment), Chord(isegment)], ...
             FaceColor, "FaceAlpha", FaceAlpha, "EdgeColor", [0.05, 0.12, 0.18], "LineWidth", 1.2);
         PanelIn = PanelOut;
     end
 end
+
+end
+
+function DrawChordLimit(Segments, FtPerM, ChordLimit, Label, LabelOffset)
+% Draw the maximum allowed chord fraction over the selected station range.
+
+if isempty(Segments)
+    return
+end
+
+StationIn = min(cellfun(@(Segment) Segment.YInboard * FtPerM, Segments));
+StationOut = max(cellfun(@(Segment) Segment.YOutboard * FtPerM, Segments));
+DrawChordLimitSpan(StationIn, StationOut, ChordLimit, Label, LabelOffset);
+
+end
+
+function DrawChordLimitSpan(StationIn, StationOut, ChordLimit, Label, LabelOffset)
+% Red dashed cap line shows the optimizer's local chord-fraction bound.
+
+plot([StationIn, StationOut], [ChordLimit, ChordLimit], "r--", "LineWidth", 1.6);
+text(0.5 * (StationIn + StationOut), ChordLimit + LabelOffset, Label, ...
+    "HorizontalAlignment", "center", "Color", [0.75, 0.05, 0.05], "FontWeight", "bold");
 
 end
 
@@ -127,17 +138,6 @@ if isempty(StationIn)
     Point = [];
 else
     Point = [0.5 * (min(StationIn) + max(StationOut)), ChordOffset + max(Chord)];
-end
-
-end
-
-function [Chord] = MaxSegmentChord(Segments)
-% Maximum selected chord fraction for a segment group.
-
-if isempty(Segments)
-    Chord = 0;
-else
-    Chord = max(cellfun(@(Segment) Segment.ChordFraction, Segments));
 end
 
 end

@@ -146,7 +146,7 @@ Surfaces.MaxModelHalfSpanStation = MaxModelHalfSpanStation;
 Surfaces.MaxControlSurfaceSpan = 5 / FtPerM; % [m] reporting split limit; optimized panels are no longer than 5 ft.
 Surfaces.PanelStationWidth = FtToStation(5); % [station] each optimizer panel spans at most 5 physical ft.
 Surfaces.PitchStationRange = FtToStation([0, 10]); % [station] pitch elevon allowed from centerline to 10 ft.
-Surfaces.OutboardStationRange = FtToStation([20, 45]); % [station] dual/roll elevons allowed from 20 to 45 ft.
+Surfaces.OutboardStationRange = FtToStation([20, 45]); % [station] dual-use pitch/roll elevons allowed from 20 to 45 ft.
 
 % Planform fields let the optimizer interpolate local chord and x-location
 % from span station. TauControlEff is the assumed hinge/control efficiency.
@@ -156,7 +156,7 @@ Planform.ChordLength = ChordLength;         % [m] local full chord from the scal
 Planform.ChordLeadingEdgeX = ChordLeadingEdgeX;   % [m] local leading-edge x-location.
 Planform.ChordTrailingEdgeX = ChordTrailingEdgeX; % [m] local trailing-edge x-location.
 
-Surfaces.SharedTrailingEdge = 1; % dual-use and roll-only panels share outboard trailing-edge chord.
+Surfaces.SharedTrailingEdge = 1; % outboard panels are one physical dual-use pitch/roll elevon surface.
 
 Surfaces.Elevator = Planform;
 Surfaces.Elevator.Name = "Pitch Elevon";
@@ -168,10 +168,8 @@ Surfaces.DualElevon.Name = "Dual-Use Elevon";
 Surfaces.DualElevon.ChordFractions = 0.40; % [-] max local chord fraction outside 20 ft for shared pitch+roll use.
 Surfaces.DualElevon.SectionClDelta = 3.0;  % [1/rad] local 2D dcl/d(delta_elevon) for pitch/roll dual use.
 
-Surfaces.Aileron = Planform;
-Surfaces.Aileron.Name = "Roll Elevon";
-Surfaces.Aileron.ChordFractions = 0.40; % [-] max roll-only chord fraction; combined with dual-use by a shared bound.
-Surfaces.Aileron.SectionClDelta = 3.0;  % [1/rad] local 2D dcl/d(delta_elevon); CrlDeltaA is integrated from this.
+Surfaces.Aileron = Surfaces.DualElevon;
+Surfaces.Aileron.Name = "Roll Role of Dual-Use Elevon"; % same physical panels, evaluated for differential roll motion.
 
 Surfaces.Rudder.TauControlEff = 0.85; % [-] rudder hinge/control effectiveness factor.
 % Rudder still uses a small candidate grid because it is independent of the
@@ -218,10 +216,9 @@ CgSweep.Converged = Converged;
 
 fprintf(1, "Required pitch authority area fraction: %.3f\n", SizingOpt.Elevator.AreaFraction);
 fprintf(1, "Selected pitch elevon option: %s\n", SizingOpt.Elevator.Name);
-fprintf(1, "Required roll authority area fraction: %.3f\n", SizingOpt.Aileron.AreaFraction);
+fprintf(1, "Roll authority uses dual-use elevon area fraction: %.3f\n", SizingOpt.Aileron.AreaFraction);
 fprintf(1, "Physical pitch-only elevon area fraction: %.3f\n", SizingOpt.Elevator.PhysicalAreaFraction);
 fprintf(1, "Physical dual-use elevon area fraction: %.3f\n", SizingOpt.DualElevon.AreaFraction);
-fprintf(1, "Physical roll-only elevon area fraction: %.3f\n", SizingOpt.Aileron.PhysicalAreaFraction);
 fprintf(1, "Required rudder area fraction: %.3f\n", SizingOpt.Rudder.AreaFraction);
 fprintf(1, "Total required control area fraction: %.3f\n", SizingOpt.AreaFraction);
 fprintf(1, "Maximum selected elevator deflection: %.2f deg\n", max(abs([SizingOpt.Elevator.Checks.Trim.Delta; SizingOpt.Elevator.Checks.Pullup.DeltaFinal; SizingOpt.Elevator.Checks.Cruise.Delta])) * 180 / pi);

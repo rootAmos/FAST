@@ -64,7 +64,7 @@ OptiProblem.subject_to(DualChord >= 0);
 OptiProblem.subject_to(DualChord <= DualMax);
 
 CLdelta = PitchCoeff.CL' * PitchChord + DualCoeff.CL' * DualChord;
-CmdeltaRef = PitchCoeff.Cm' * PitchChord + DualCoeff.Cm' * DualChord;
+CmdeltaRef = pitch_moment(PitchCoeff, PitchChord) + pitch_moment(DualCoeff, DualChord);
 
 if CaseType == "pullup"
     apply_pullup_constraints(OptiProblem, Aircraft, Case, CLdelta, CmdeltaRef);
@@ -89,6 +89,14 @@ catch
     AreaValue = NaN;
     Converged = false;
 end
+
+end
+
+function [Cmdelta] = pitch_moment(Coeff, ChordFraction)
+% Moment derivative for a trailing-edge control strip with selected chord
+% fraction f: the lift term is linear in f and the center shift adds f^2.
+
+Cmdelta = Coeff.CmLinear' * ChordFraction + Coeff.CmQuadratic' * (ChordFraction .* ChordFraction);
 
 end
 

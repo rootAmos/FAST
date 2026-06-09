@@ -28,9 +28,7 @@ function [] = README()
 %     Surfaces.Elevator.ChordFractions = 0.25;
 %     Surfaces.DualElevon = Planform;
 %     Surfaces.DualElevon.ChordFractions = 0.40;
-%     Surfaces.Aileron = Planform;
-%     Surfaces.Aileron.ChordFractions = 0.40;
-%     Surfaces.Aileron.SectionClDelta = 3.0;
+%     Surfaces.Aileron = Surfaces.DualElevon; % same physical outboard surface, used differentially for roll.
 %     Surfaces.Rudder.TauControlEff = 0.85;
 %     Surfaces.Rudder.ChordFractions = linspace(0.10, 0.35, 20)';
 %     Surfaces.Rudder.SpanFractions = linspace(0.05, 0.80, 152)';
@@ -66,8 +64,8 @@ function [] = README()
 % a nonlinear 6DOF simulation or high-fidelity aero database.
 %
 % OptimizeSharedElevons is the current BWB sizing entry point for a
-% pitch-only inboard section, a dual-use outboard section, a roll-only
-% outboard section, and a separately sized winglet rudder.
+% pitch-only inboard section, one dual-use outboard pitch/roll section, and
+% a separately sized winglet rudder.
 %
 % ControlSurfacePenalty is the optional FAST feedback hook: it records the
 % selected control surfaces on Aircraft.Dynamics.ControlSurface, adjusts the

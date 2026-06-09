@@ -34,23 +34,20 @@ OutboardPanels = DynamicsPkg.BuildStationPanels(OutboardStationIn, OutboardStati
 % Pre-integrate each candidate panel once. The CasADi problem then chooses
 % panel chord fractions without carrying interpolation/integration logic.
 PitchCoeff = DynamicsPkg.PanelCoefficients(Aircraft, Surfaces.Elevator, PitchPanels, MaxStation);
-DualCoeff = DynamicsPkg.PanelCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
-RollCoeff = DynamicsPkg.PanelCoefficients(Aircraft, Surfaces.Aileron, OutboardPanels, MaxStation);
+OutboardCoeff = DynamicsPkg.PanelCoefficients(Aircraft, Surfaces.DualElevon, OutboardPanels, MaxStation);
 
 PitchMax = max(Surfaces.Elevator.ChordFractions);
-DualMax = max(Surfaces.DualElevon.ChordFractions);
-RollMax = max(Surfaces.Aileron.ChordFractions);
-OutboardMax = max(DualMax, RollMax);
+OutboardMax = max(Surfaces.DualElevon.ChordFractions);
 
 % This is the CasADi/Ipopt optimization call. It returns the optimized chord
-% fraction for each pitch-only, dual-use, and roll-only spanwise panel.
-[PitchChordValue, DualChordValue, RollChordValue, SolverValues] = DynamicsPkg.SolveSharedElevonChords( ...
-    Aircraft, Cases, PitchCoeff, DualCoeff, RollCoeff, PitchPanels, OutboardPanels, ...
-    PitchMax, DualMax, RollMax, OutboardMax, MaxStation);
+% fraction for each pitch-only and outboard dual-use spanwise panel.
+[PitchChordValue, OutboardChordValue, SolverValues] = DynamicsPkg.SolveSharedElevonChords( ...
+    Aircraft, Cases, PitchCoeff, OutboardCoeff, PitchPanels, OutboardPanels, ...
+    PitchMax, OutboardMax, MaxStation, Surfaces.DualElevon.TauControlEff);
 
 % Convert the raw optimizer vectors into surface structs, then run the
 % numeric Check* functions so the output contains readable margins.
 Sizing = DynamicsPkg.BuildSharedElevonSizing(Aircraft, Cases, Surfaces, PitchPanels, OutboardPanels, ...
-    PitchChordValue, DualChordValue, RollChordValue, SolverValues);
+    PitchChordValue, OutboardChordValue, SolverValues);
 
 end

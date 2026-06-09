@@ -1,5 +1,5 @@
 function [Sizing] = BuildSharedElevonSizing(Aircraft, Cases, Surfaces, PitchPanels, OutboardPanels, ...
-    PitchChordValue, DualChordValue, RollChordValue, SolverValues)
+    PitchChordValue, OutboardChordValue, SolverValues)
 %
 % [Sizing] = BuildSharedElevonSizing(...)
 %
@@ -9,13 +9,14 @@ function [Sizing] = BuildSharedElevonSizing(Aircraft, Cases, Surfaces, PitchPane
 MaxStation = Surfaces.MaxModelHalfSpanStation;
 
 % Convert optimized chord-fraction vectors back into FAST-style surface
-% structs. Dual-use panels contribute to both pitch and roll checks.
+% structs. Outboard panels are one physical dual-use surface: they contribute
+% to pitch checks under symmetric deflection and roll checks under
+% differential deflection.
 PitchOnlySegments = build_segments(Aircraft, Surfaces.Elevator, PitchPanels, PitchChordValue, MaxStation, "Pitch-only elevon");
-DualSegments = build_segments(Aircraft, Surfaces.DualElevon, OutboardPanels, DualChordValue, MaxStation, "Dual-use elevon");
-RollOnlySegments = build_segments(Aircraft, Surfaces.Aileron, OutboardPanels, RollChordValue, MaxStation, "Roll-only elevon");
+DualSegments = build_segments(Aircraft, Surfaces.DualElevon, OutboardPanels, OutboardChordValue, MaxStation, "Dual-use elevon");
 
 Elevator = combine_segments(Surfaces.Elevator, [PitchOnlySegments; DualSegments], "Pitch Elevon");
-Aileron = combine_segments(Surfaces.Aileron, [DualSegments; RollOnlySegments], "Roll Elevon");
+Aileron = combine_segments(Surfaces.Aileron, DualSegments, "Roll Role of Dual-Use Elevon");
 DualElevon = combine_segments(Surfaces.DualElevon, DualSegments, "Dual-Use Elevon");
 Rudder = DynamicsPkg.SizeRudder(Aircraft, Cases.DirectionalTrim, Surfaces.Rudder);
 
@@ -24,7 +25,7 @@ Aileron.Checks = check_aileron(Aircraft, Cases, Aileron);
 Rudder.Checks.Direction = DynamicsPkg.CheckDirectionalTrim(Aircraft, Cases.DirectionalTrim, Rudder);
 
 Elevator.PhysicalAreaFraction = sum(cellfun(@(Segment) Segment.AreaFraction, PitchOnlySegments));
-Aileron.PhysicalAreaFraction = sum(cellfun(@(Segment) Segment.AreaFraction, RollOnlySegments));
+Aileron.PhysicalAreaFraction = 0;
 Elevator.MaxDeflection = Elevator.Checks.MaxDeflection;
 Aileron.MaxDeflection = Aileron.Checks.MaxDeflection;
 Rudder.MaxDeflection = abs(Rudder.Checks.Direction.Delta);
@@ -38,8 +39,7 @@ Sizing.Aileron = Aileron;
 Sizing.DualElevon = DualElevon;
 Sizing.Rudder = Rudder;
 Sizing.Converged = Elevator.Converged && Aileron.Converged && Rudder.Converged;
-Sizing.AreaFraction = Elevator.PhysicalAreaFraction + DualElevon.AreaFraction + ...
-    Aileron.PhysicalAreaFraction + Rudder.AreaFraction;
+Sizing.AreaFraction = Elevator.PhysicalAreaFraction + DualElevon.AreaFraction + Rudder.AreaFraction;
 Sizing.Casadi = struct("Solver", "casadi", ...
     "PitchAreaFraction", SolverValues.PitchArea, ...
     "PitchCLdelta", SolverValues.PitchCLdelta, ...
@@ -67,7 +67,8 @@ for ipanel = find(ChordFractions(:)' > 1.0e-4)
     Segment.ChordFraction = ChordFractions(ipanel);
     Segment.AreaFraction = Coeff.Area(ipanel) * ChordFractions(ipanel);
     Segment.CLdeltaEffective = Coeff.CL(ipanel) * ChordFractions(ipanel);
-    Segment.CmdeltaEffective = Coeff.Cm(ipanel) * ChordFractions(ipanel);
+    Segment.CmdeltaEffective = Coeff.CmLinear(ipanel) * ChordFractions(ipanel) + ...
+        Coeff.CmQuadratic(ipanel) * ChordFractions(ipanel) ^ 2;
     Segments{end + 1, 1} = Segment; %#ok<AGROW>
 end
 
