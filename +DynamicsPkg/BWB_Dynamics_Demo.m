@@ -183,7 +183,8 @@ SizingSweep = SizingOpt;
 
 if RunCgSweep
     XcgMAC = linspace(Aircraft.Specs.Dynamics.CG.ForwardMAC, Aircraft.Specs.Dynamics.CG.AftMAC, 3)';
-    PitchAreaFraction = zeros(size(XcgMAC));
+    PitchCaseSweep = DynamicsPkg.SweepPitchCaseAreas(Aircraft, Cases, Surfaces, XcgMAC);
+    PitchAreaFraction = PitchCaseSweep.MaxAreaFraction;
     Converged = zeros(size(XcgMAC));
 
     for icg = 1:length(XcgMAC)
@@ -201,12 +202,14 @@ if RunCgSweep
     end
 else
     XcgMAC = Cases.LongitudinalTrim.XcgMAC;
+    PitchCaseSweep = DynamicsPkg.SweepPitchCaseAreas(Aircraft, Cases, Surfaces, XcgMAC);
     PitchAreaFraction = SizingOpt.Casadi.PitchAreaFraction;
     Converged = SizingOpt.Converged;
 end
 
 CgSweep.XcgMAC = XcgMAC;
 CgSweep.PitchAreaFraction = PitchAreaFraction;
+CgSweep.PitchCaseSweep = PitchCaseSweep;
 CgSweep.Converged = Converged;
 
 fprintf(1, "Required pitch authority area fraction: %.3f\n", SizingOpt.Elevator.AreaFraction);
@@ -247,7 +250,10 @@ end
 
 figure;
 if RunCgSweep
-    plot(CgSweep.XcgMAC, CgSweep.PitchAreaFraction, "LineWidth", 1.5);
+    plot(CgSweep.XcgMAC, [CgSweep.PitchCaseSweep.Trim, CgSweep.PitchCaseSweep.Pullup, ...
+        CgSweep.PitchCaseSweep.Cruise, CgSweep.PitchCaseSweep.Rotation, ...
+        CgSweep.PitchCaseSweep.MaxAreaFraction], "LineWidth", 1.5);
+    legend(["Trim", "Pull-up", "Cruise", "Rotation", "Envelope"], "Location", "best");
 else
     plot(CgSweep.XcgMAC, CgSweep.PitchAreaFraction, "o", "MarkerSize", 8, "LineWidth", 1.5);
 end
