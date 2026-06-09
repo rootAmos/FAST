@@ -35,20 +35,20 @@ plot([0, HalfSpan * FtPerM], [0, 0], "k", "LineWidth", 1.2);
 area(AvailableHalfSpan, AvailableChordFraction, ...
     "FaceColor", [0.82, 0.86, 0.90], "FaceAlpha", 0.35, "EdgeColor", [0.45, 0.48, 0.52], "LineWidth", 1.0);
 
-DrawSegmentBand(PitchOnlySegments, [0.20, 0.45, 0.85], FtPerM, 0, MaxPanelSpanFt);
-DrawSegmentBand(DualSegments, [0.20, 0.70, 0.55], FtPerM, 0, MaxPanelSpanFt);
+DrawSegmentBand(PitchOnlySegments, [0.20, 0.45, 0.85], FtPerM, 0, MaxPanelSpanFt, 0.85);
+DrawSegmentBand(DualSegments, [0.20, 0.70, 0.55], FtPerM, 0, MaxPanelSpanFt, 0.60);
 
-% Roll-only chord is drawn above the dual-use chord to show the shared
-% outboard chord budget. It is an adjacent chord allocation, not a second
-% surface stacked on top of the dual-use elevon.
-DrawSegmentBand(RollOnlySegments, [0.95, 0.62, 0.05], FtPerM, MaxSegmentChord(DualSegments), MaxPanelSpanFt);
+% Overlay roll-only panels on the same chord-fraction axis. The optimizer
+% still enforces DualChord + RollChord <= max chord; this plot shows role
+% overlap/usage, not physically stacked chord.
+DrawSegmentBand(RollOnlySegments, [0.95, 0.62, 0.05], FtPerM, 0, MaxPanelSpanFt, 0.45);
 patch([RudderIn, RudderOut, RudderOut, RudderIn], ...
     [0, 0, Sizing.Rudder.ChordFraction, Sizing.Rudder.ChordFraction], ...
     [0.55, 0.25, 0.70], "FaceAlpha", 0.85, "EdgeColor", [0.05, 0.12, 0.18], "LineWidth", 1.2);
 
 PitchLabel = SegmentLabelPoint(PitchOnlySegments, FtPerM, 0);
 DualLabel = SegmentLabelPoint(DualSegments, FtPerM, 0);
-RollLabel = SegmentLabelPoint(RollOnlySegments, FtPerM, MaxSegmentChord(DualSegments));
+RollLabel = SegmentLabelPoint(RollOnlySegments, FtPerM, 0);
 
 if ~isempty(PitchLabel)
     text(PitchLabel(1), PitchLabel(2) + 0.015, ...
@@ -84,7 +84,7 @@ Segments = SegmentsIn(Keep);
 
 end
 
-function DrawSegmentBand(Segments, FaceColor, FtPerM, ChordOffset, MaxPanelSpanFt)
+function DrawSegmentBand(Segments, FaceColor, FtPerM, ChordOffset, MaxPanelSpanFt, FaceAlpha)
 % Draw contiguous optimizer cells as one physical control surface band.
 
 if isempty(Segments)
@@ -110,7 +110,7 @@ for iband = 1:BandId(end)
         PanelOut = min(PanelIn + MaxPanelSpanFt, BandOut);
         patch([PanelIn, PanelOut, PanelOut, PanelIn], ...
             ChordOffset + [0, 0, BandChord, BandChord], ...
-            FaceColor, "FaceAlpha", 0.85, "EdgeColor", [0.05, 0.12, 0.18], "LineWidth", 1.2);
+            FaceColor, "FaceAlpha", FaceAlpha, "EdgeColor", [0.05, 0.12, 0.18], "LineWidth", 1.2);
         PanelIn = PanelOut;
     end
 end

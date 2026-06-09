@@ -93,9 +93,11 @@ Aircraft.Specs.Weight.MLW = LandingWeightFraction * Aircraft.Specs.Weight.MTOW;
 Aircraft.Specs.Dynamics.Geometry.cbar = Aircraft.Specs.Aero.S / Aircraft.Specs.Dynamics.Geometry.b;
 Aircraft.Specs.Dynamics.Inertia.Ixx = BaselineIxx * (Aircraft.Specs.Dynamics.Geometry.b / BaselineSpan) ^ 2;
 
-% CG and main-gear locations are nondimensionalized by MAC.
+% Demo CG and main-gear locations are nondimensionalized by MAC. These CG
+% limits are assumed for the placeholder BWB aero model, not derived from a
+% mass-properties/loading envelope.
 Aircraft.Specs.Dynamics.CG.ForwardMAC = 0.28;
-Aircraft.Specs.Dynamics.CG.AftMAC = 0.38;
+Aircraft.Specs.Dynamics.CG.AftMAC = 0.32;
 Aircraft.Specs.Dynamics.Gear.XmlgMAC = 0.36;
 
 %% FAST PRE-PROCESSING %%
